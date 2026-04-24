@@ -57,7 +57,7 @@ export default function GuestPage() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap', animationDelay: '0.4s' }} className="fade-up">
-            {['No Pressure', 'No Followers', 'No Urgency'].map((t, i) => (
+            {['No Pressure', 'No Urgency'].map((t, i) => (
               <span key={i} style={{ padding: '7px 16px', background: '#f0ede8', borderRadius: 999, fontSize: 14, color: '#2c2c2e' }}>{t}</span>
             ))}
           </div>
