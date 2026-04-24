@@ -22,7 +22,7 @@ export default function GuestPage() {
       <Navigation />
 
       {/* HERO */}
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '80px 24px 40px', position: 'relative', overflow: 'hidden', textAlign: 'center' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '40px 24px 40px', position: 'relative', overflow: 'hidden', textAlign: 'center', marginTop: '-100px' }}>
         {orbs.map((o, i) => (
           <div key={i} style={{
             position: 'absolute', width: o.w, height: o.h, borderRadius: '50%',
