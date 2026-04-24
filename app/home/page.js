@@ -32,9 +32,10 @@ export default function HomePage() {
 
   const greet = () => {
     const h = new Date().getHours()
-    if (h < 12) return 'Good morning'
-    if (h < 17) return 'Good afternoon'
-    return 'Good evening'
+    if (h >= 5 && h < 12) return 'Good Morning'
+    if (h >= 12 && h < 17) return 'Good Afternoon'
+    if (h >= 17 && h < 22) return 'Good Evening'
+    return 'Good Night'
   }
 
   return (
@@ -95,7 +96,7 @@ export default function HomePage() {
                   <p style={{ fontSize: 16, color: '#6b6b6e', marginBottom: 4 }}>How are you today?</p>
                   <p style={{ fontSize: 13, color: '#b0a99a' }}>Set a status for your circle</p>
                 </div>
-                <Link href="/status" style={{ padding: '10px 20px', background: '#2c2c2e', color: '#faf9f7', borderRadius: 999, textDecoration: 'none', fontSize: 14 }}>set status</Link>
+                <Link href="/status" style={{ padding: '10px 20px', background: '#2c2c2e', color: '#faf9f7', borderRadius: 999, textDecoration: 'none', fontSize: 14 }}>Set Status</Link>
               </div>
             )}
           </div>

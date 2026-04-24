@@ -43,18 +43,17 @@ export default function ChatPage() {
     return () => supabase.removeChannel(channel)
   }, [selectedMember])
 
-  const getChatId = (code1, code2) => {
-    return [code1, code2].sort().join('_')
-  }
+  const getChatId = (code1, code2) => [code1, code2].sort().join('_')
 
   const loadMessages = async () => {
     if (!user || !selectedMember) return
     const chatId = getChatId(user.inviteCode, selectedMember.inviteCode)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('messages')
       .select('*')
       .eq('chat_id', chatId)
       .order('created_at', { ascending: true })
+    if (error) { console.error('Load error:', error); return }
     setMessages(data || [])
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
   }
@@ -66,26 +65,33 @@ export default function ChatPage() {
   }
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !user || !selectedMember || sending) return
+    const text = newMessage.trim()
+    if (!text || !user || !selectedMember || sending) return
     setSending(true)
+    setNewMessage('')
     const chatId = getChatId(user.inviteCode, selectedMember.inviteCode)
-    console.log('Sending to chat:', chatId)
-    console.log('From:', user.inviteCode)
-    console.log('To:', selectedMember.inviteCode)
-    const { data, error } = await supabase.from('messages').insert({
+    const { error } = await supabase.from('messages').insert({
       chat_id: chatId,
       sender_code: user.inviteCode,
-      content: newMessage.trim(),
+      content: text,
       created_at: new Date().toISOString(),
     })
-    console.log('Result:', data, error)
     if (error) {
-      console.error('Failed to send:', error)
+      console.error('Failed:', error)
+      setNewMessage(text)
     } else {
-      setNewMessage('')
       await loadMessages()
     }
     setSending(false)
+  }
+
+  const formatTime = (timestamp) => {
+    const date = new Date(timestamp)
+    const now = new Date()
+    const isToday = date.toDateString() === now.toDateString()
+    const timeStr = date.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })
+    if (isToday) return timeStr
+    return date.toLocaleDateString('en', { month: 'short', day: 'numeric' }) + ' · ' + timeStr
   }
 
   if (!user) return (
@@ -125,7 +131,6 @@ export default function ChatPage() {
           </div>
         ) : (
           <>
-            {/* Member list */}
             {!selectedMember && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {circle.map((m, i) => {
@@ -141,17 +146,11 @@ export default function ChatPage() {
                         <p style={{ fontSize: 12, color: '#b0a99a' }}>chat is {isOn ? 'on' : 'off'}</p>
                       </div>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <button
-                          onClick={() => toggleChat(m.inviteCode)}
-                          style={{ width: 44, height: 24, borderRadius: 999, background: isOn ? '#8a9e8c' : 'rgba(0,0,0,0.1)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s ease', flexShrink: 0 }}
-                        >
+                        <button onClick={() => toggleChat(m.inviteCode)} style={{ width: 44, height: 24, borderRadius: 999, background: isOn ? '#8a9e8c' : 'rgba(0,0,0,0.1)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s ease', flexShrink: 0 }}>
                           <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'white', position: 'absolute', top: 3, left: isOn ? 23 : 3, transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
                         </button>
                         {isOn && (
-                          <button
-                            onClick={() => setSelectedMember(m)}
-                            style={{ padding: '7px 14px', background: '#2c2c2e', color: '#faf9f7', border: 'none', borderRadius: 999, fontSize: 12, cursor: 'pointer' }}
-                          >
+                          <button onClick={() => setSelectedMember(m)} style={{ padding: '7px 14px', background: '#2c2c2e', color: '#faf9f7', border: 'none', borderRadius: 999, fontSize: 12, cursor: 'pointer' }}>
                             open
                           </button>
                         )}
@@ -162,7 +161,6 @@ export default function ChatPage() {
               </div>
             )}
 
-            {/* Chat window */}
             {selectedMember && (
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
@@ -172,7 +170,6 @@ export default function ChatPage() {
                   </div>
                   <div>
                     <p style={{ fontSize: 15, color: '#2c2c2e', fontWeight: 500 }}>{selectedMember.displayName || selectedMember.initials}</p>
-                    
                   </div>
                 </div>
 
@@ -183,7 +180,7 @@ export default function ChatPage() {
                   </div>
                 ) : (
                   <>
-                    <div style={{ minHeight: 320, maxHeight: 420, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12, padding: '4px 0' }}>
+                    <div style={{ minHeight: 320, maxHeight: 420, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12, padding: '4px 0' }}>
                       {messages.length === 0 && (
                         <div style={{ textAlign: 'center', padding: '40px 20px' }}>
                           <p style={{ fontFamily: 'var(--font-serif)', fontSize: 17, color: '#b0a99a', marginBottom: 6 }}>A quiet space between you.</p>
@@ -194,17 +191,21 @@ export default function ChatPage() {
                         const isMe = msg.sender_code === user.inviteCode
                         return (
                           <div key={i} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
-                            <div style={{
-                              maxWidth: '75%',
-                              padding: '10px 14px',
-                              background: isMe ? '#2c2c2e' : '#ffffff',
-                              color: isMe ? '#faf9f7' : '#2c2c2e',
-                              borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                              fontSize: 15,
-                              lineHeight: 1.5,
-                              boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
-                            }}>
-                              {msg.content}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', gap: 3, maxWidth: '75%' }}>
+                              <div style={{
+                                padding: '10px 14px',
+                                background: isMe ? '#2c2c2e' : '#ffffff',
+                                color: isMe ? '#faf9f7' : '#2c2c2e',
+                                borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                                fontSize: 15,
+                                lineHeight: 1.5,
+                                boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
+                              }}>
+                                {msg.content}
+                              </div>
+                              <p style={{ fontSize: 10, color: '#c0bdb8', paddingLeft: 4, paddingRight: 4 }}>
+                                {formatTime(msg.created_at)}
+                              </p>
                             </div>
                           </div>
                         )
@@ -221,7 +222,7 @@ export default function ChatPage() {
                         style={{ flex: 1, padding: '12px 16px', background: '#ffffff', border: '1.5px solid transparent', borderRadius: 14, fontSize: 15, color: '#2c2c2e', resize: 'none', outline: 'none', fontFamily: 'var(--font-sans)', lineHeight: 1.5, boxShadow: '0 2px 12px rgba(0,0,0,0.05)', transition: 'border-color 0.2s ease' }}
                         onFocus={e => e.target.style.borderColor = '#8a9e8c'}
                         onBlur={e => e.target.style.borderColor = 'transparent'}
-                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
+                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!sending) sendMessage() } }}
                       />
                       <button
                         onClick={sendMessage}
