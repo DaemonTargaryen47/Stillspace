@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { initUser, updateUser, signOut, restoreFromSupabaseByEmail, syncUserToSupabase, storage, hydrateUserFromSupabase, pushToSupabase } from '../../lib/store'
+import { initUser, updateUser, signOut, restoreFromSupabaseByEmail, storage, hydrateUserFromSupabase, pushToSupabase } from '../../lib/store'
 import Navigation from '../../components/Navigation'
+import Link from 'next/link'
 
 export default function SettingsPage() {
   const [user, setUser] = useState(null)
@@ -225,13 +226,22 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section>
+      <section style={{ marginBottom: 20 }}>
         <div style={{ padding: 20, background: '#f4f3f0', borderRadius: 16, textAlign: 'center' }}>
           <p style={{ fontFamily: 'var(--font-serif)', fontSize: 16, color: '#6b6b6e', lineHeight: 1.7 }}>
             You can come and go freely. No need to respond. This space is yours.
           </p>
         </div>
       </section>
+
+      {!user.isGuest && user.email === 'sir.ushno@gmail.com' && (
+        <div style={{ textAlign: 'center', marginTop: 8 }}>
+          <Link href="/admin" style={{ fontSize: 11, color: '#c0bdb8', letterSpacing: '0.08em', textTransform: 'uppercase', textDecoration: 'none', borderBottom: '1px solid #e0ddd8', paddingBottom: 2 }}>
+            admin dashboard
+          </Link>
+        </div>
+      )}
+
     </div>
   )
 }

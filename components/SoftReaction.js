@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
 const SYMBOLS = ['◇', '○', '△', '□', '◎']
@@ -8,23 +8,29 @@ export default function SoftReaction({ myCode, memberCode }) {
   const [floating, setFloating] = useState([])
   const [sent, setSent] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
+  const channelRef = useRef(null)
 
   useEffect(() => {
     if (!myCode) return
-    const channel = supabase
-      .channel('reactions_to_' + myCode + '_' + Date.now())
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'reactions',
-        filter: 'to_code=eq.' + myCode,
-      }, (payload) => {
-        const id = Date.now()
-        setFloating(prev => [...prev, { id, symbol: payload.new.symbol }])
-        setTimeout(() => setFloating(prev => prev.filter(f => f.id !== id)), 3000)
-      })
-      .subscribe()
-    return () => supabase.removeChannel(channel)
+    const channelName = 'reactions_to_' + myCode
+    const channel = supabase.channel(channelName)
+    channel.on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'reactions',
+      filter: 'to_code=eq.' + myCode,
+    }, (payload) => {
+      const id = Date.now()
+      setFloating(prev => [...prev, { id, symbol: payload.new.symbol }])
+      setTimeout(() => setFloating(prev => prev.filter(f => f.id !== id)), 3000)
+    }).subscribe()
+    channelRef.current = channel
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
+    }
   }, [myCode])
 
   const handleSend = async (symbol) => {
@@ -44,14 +50,10 @@ export default function SoftReaction({ myCode, memberCode }) {
     <div style={{ position: 'relative', flexShrink: 0 }}>
       {floating.map(f => (
         <div key={f.id} style={{
-          position: 'fixed',
-          bottom: '30%',
-          left: '50%',
-          fontSize: 52,
-          color: '#8a9e8c',
+          position: 'fixed', bottom: '30%', left: '50%',
+          fontSize: 52, color: '#8a9e8c',
           animation: 'floatUp 3s ease forwards',
-          pointerEvents: 'none',
-          zIndex: 999,
+          pointerEvents: 'none', zIndex: 999,
           transform: 'translateX(-50%)',
         }}>
           {f.symbol}
@@ -59,19 +61,15 @@ export default function SoftReaction({ myCode, memberCode }) {
       ))}
 
       {!showPicker ? (
-        <button
-          onClick={() => !sent && setShowPicker(true)}
-          style={{
-            padding: '6px 14px',
-            background: sent ? '#f0f5f0' : '#f8f7f4',
-            border: '1px solid rgba(0,0,0,0.07)',
-            borderRadius: 999, fontSize: 12,
-            color: sent ? '#8a9e8c' : '#b0a99a',
-            cursor: sent ? 'default' : 'pointer',
-            transition: 'all 0.2s ease',
-            whiteSpace: 'nowrap',
-          }}
-        >
+        <button onClick={() => !sent && setShowPicker(true)} style={{
+          padding: '6px 14px',
+          background: sent ? '#f0f5f0' : '#f8f7f4',
+          border: '1px solid rgba(0,0,0,0.07)',
+          borderRadius: 999, fontSize: 12,
+          color: sent ? '#8a9e8c' : '#b0a99a',
+          cursor: sent ? 'default' : 'pointer',
+          transition: 'all 0.2s ease', whiteSpace: 'nowrap',
+        }}>
           {sent ? 'sent ◇' : 'react'}
         </button>
       ) : (

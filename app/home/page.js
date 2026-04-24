@@ -7,7 +7,6 @@ import Navigation from '../../components/Navigation'
 import CircleMember from '../../components/CircleMember'
 import GuestBanner from '../../components/GuestBanner'
 import WeatherRoom from '../../components/WeatherRoom'
-import SoftReaction from '../../components/SoftReaction'
 import Link from 'next/link'
 
 export default function HomePage() {
@@ -41,26 +40,27 @@ export default function HomePage() {
     if (circle.length === 0) { setLiveCircle([]); return }
     const codes = circle.map(m => m.inviteCode).filter(Boolean)
     if (codes.length === 0) { setLiveCircle(circle); return }
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('users')
-      .select('invite_code, status, display_name, disappear_mode')
+      .select('invite_code, status, display_name, disappear_mode, custom_status_text')
       .in('invite_code', codes)
-    if (!data) { setLiveCircle(circle); return }
+    if (error || !data) { setLiveCircle(circle); return }
     const updated = circle.map(member => {
       const live = data.find(d => d.invite_code === member.inviteCode)
       if (!live) return member
-      return { ...member, status: live.disappear_mode ? null : (live.status || null), displayName: live.display_name || member.displayName }
+      return {
+        ...member,
+        status: live.disappear_mode ? null : (live.status || null),
+        displayName: live.display_name || member.displayName,
+        customStatusText: live.disappear_mode ? null : (live.custom_status_text || null),
+      }
     })
     setLiveCircle(updated)
   }
 
   const subscribeToCircleUpdates = (u) => {
-    const circle = u.circle || []
-    const codes = circle.map(m => m.inviteCode).filter(Boolean)
-    if (codes.length === 0) return
-
     const channel = supabase
-      .channel('home_circle_live_' + u.inviteCode)
+      .channel('home_circle_' + u.inviteCode)
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
@@ -69,13 +69,17 @@ export default function HomePage() {
         const updated = payload.new
         setLiveCircle(prev => prev.map(m => {
           if (m.inviteCode === updated.invite_code) {
-            return { ...m, status: updated.disappear_mode ? null : (updated.status || null), displayName: updated.display_name || m.displayName }
+            return {
+              ...m,
+              status: updated.disappear_mode ? null : (updated.status || null),
+              displayName: updated.display_name || m.displayName,
+              customStatusText: updated.disappear_mode ? null : (updated.custom_status_text || null),
+            }
           }
           return m
         }))
       })
       .subscribe()
-
     return () => supabase.removeChannel(channel)
   }
 
@@ -125,15 +129,23 @@ export default function HomePage() {
 
       <div style={{ padding: '0 28px' }}>
         <section style={{ marginBottom: 16 }}>
-          <div style={{ padding: '22px', background: currentStatus ? currentStatus.bg : '#ffffff', borderRadius: 20, boxShadow: currentStatus ? '0 4px 24px ' + currentStatus.color + '18' : '0 2px 16px rgba(0,0,0,0.05)' }}>
-            {user.currentStatus ? (
+          <div style={{
+            padding: '22px',
+            background: user.customStatusText ? '#f5f0eb' : currentStatus ? currentStatus.bg : '#ffffff',
+            borderRadius: 20,
+            boxShadow: currentStatus ? '0 4px 24px ' + currentStatus.color + '18' : '0 2px 16px rgba(0,0,0,0.05)',
+          }}>
+            {user.currentStatus || user.customStatusText ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
                   <p style={{ fontSize: 11, color: '#b0a99a', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>your status</p>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ width: 11, height: 11, borderRadius: '50%', background: currentStatus ? currentStatus.color : '#a0a0a3', flexShrink: 0, boxShadow: currentStatus ? '0 0 0 3px ' + currentStatus.color + '22' : 'none' }} />
-                    <span style={{ fontSize: 17, color: currentStatus ? currentStatus.color : '#6b6b6e' }}>{currentStatus ? currentStatus.label : ''}</span>
+                    <span style={{ width: 11, height: 11, borderRadius: '50%', background: currentStatus ? currentStatus.color : '#a09080', flexShrink: 0 }} />
+                    <span style={{ fontSize: 17, color: currentStatus ? currentStatus.color : '#a09080' }}>
+                      {user.customStatusText || (currentStatus ? currentStatus.label : '')}
+                    </span>
                   </div>
+                  {user.customStatusText && <p style={{ fontSize: 11, color: '#b0a99a', marginTop: 4, marginLeft: 21 }}>custom</p>}
                 </div>
                 <Link href="/status" style={{ padding: '8px 16px', background: 'rgba(255,255,255,0.65)', border: '1px solid rgba(0,0,0,0.07)', borderRadius: 999, textDecoration: 'none', fontSize: 13, color: '#6b6b6e' }}>change</Link>
               </div>
@@ -205,14 +217,7 @@ export default function HomePage() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {circle.map(m => (
-                <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ flex: 1 }}>
-                    <CircleMember member={m} />
-                  </div>
-                  <SoftReaction myCode={user.inviteCode} memberCode={m.inviteCode} memberName={m.displayName || m.initials} />
-                </div>
-              ))}
+              {circle.map(m => <CircleMember key={m.id} member={m} />)}
             </div>
           )}
         </section>

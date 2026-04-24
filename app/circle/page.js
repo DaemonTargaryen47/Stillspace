@@ -36,11 +36,19 @@ export default function CirclePage() {
     const circle = u.circle || []
     if (circle.length === 0) { setLiveCircle([]); setLoading(false); return }
     const codes = circle.map(m => m.inviteCode).filter(Boolean)
-    const { data } = await supabase.from('users').select('invite_code, status, display_name, disappear_mode').in('invite_code', codes)
+    const { data } = await supabase
+      .from('users')
+      .select('invite_code, status, display_name, disappear_mode, custom_status_text')
+      .in('invite_code', codes)
     const updated = circle.map(member => {
       const live = data?.find(d => d.invite_code === member.inviteCode)
       if (!live) return member
-      return { ...member, status: live.disappear_mode ? null : (live.status || null), displayName: live.display_name || member.displayName }
+      return {
+        ...member,
+        status: live.disappear_mode ? null : (live.status || null),
+        displayName: live.display_name || member.displayName,
+        customStatusText: live.disappear_mode ? null : (live.custom_status_text || null),
+      }
     })
     setLiveCircle(updated)
     setLoading(false)
@@ -70,7 +78,12 @@ export default function CirclePage() {
         const updated = payload.new
         setLiveCircle(prev => prev.map(m => {
           if (m.inviteCode === updated.invite_code) {
-            return { ...m, status: updated.disappear_mode ? null : (updated.status || null), displayName: updated.display_name || m.displayName }
+            return {
+              ...m,
+              status: updated.disappear_mode ? null : (updated.status || null),
+              displayName: updated.display_name || m.displayName,
+              customStatusText: updated.disappear_mode ? null : (updated.custom_status_text || null),
+            }
           }
           return m
         }))
@@ -113,7 +126,6 @@ export default function CirclePage() {
     setLiveCircle(prev => prev.filter(m => m.id !== memberId))
     setRemoveConfirm(null)
     await pushToSupabase(updated)
-
     if (memberToRemove?.inviteCode) {
       const { data: theirRecord } = await supabase
         .from('users')
@@ -268,11 +280,14 @@ export default function CirclePage() {
                   <div style={{ flex: 1 }}>
                     {m.displayName && <p style={{ fontSize: 14, color: '#2c2c2e', fontWeight: 500, marginBottom: 2 }}>{m.displayName}</p>}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: m.status ? '#8a9e8c' : '#d0cdc8', flexShrink: 0 }} />
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: (m.status || m.customStatusText) ? '#8a9e8c' : '#d0cdc8', flexShrink: 0 }} />
                       <span style={{ fontSize: 13, color: '#6b6b6e' }}>
-                        {m.status ? (STATUSES.find(s => s.id === m.status)?.label || m.status) : 'no status set'}
+                        {m.customStatusText ? m.customStatusText : m.status ? (STATUSES.find(s => s.id === m.status)?.label || m.status) : 'no status set'}
                       </span>
                     </div>
+                    {m.customStatusText && (
+                      <p style={{ fontSize: 10, color: '#c0bdb8', marginTop: 2, marginLeft: 14, letterSpacing: '0.04em' }}>custom status</p>
+                    )}
                     {m.inviteCode && (
                       <p style={{ fontSize: 11, color: '#c0bdb8', marginTop: 3, fontFamily: 'monospace', letterSpacing: '0.06em' }}>code: {m.inviteCode}</p>
                     )}
