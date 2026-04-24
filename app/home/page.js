@@ -1,24 +1,83 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { initUser } from '../../lib/store'
+import { initUser, hydrateUserFromSupabase } from '../../lib/store'
+import { supabase } from '../../lib/supabase'
 import { MOCK_CIRCLE, STATUSES } from '../../lib/constants'
 import Navigation from '../../components/Navigation'
 import CircleMember from '../../components/CircleMember'
 import GuestBanner from '../../components/GuestBanner'
 import WeatherRoom from '../../components/WeatherRoom'
+import SoftReaction from '../../components/SoftReaction'
 import Link from 'next/link'
 
 export default function HomePage() {
   const [user, setUser] = useState(null)
   const [time, setTime] = useState('')
+  const [liveCircle, setLiveCircle] = useState([])
 
   useEffect(() => {
-    setUser(initUser())
+    const load = async () => {
+      const u = initUser()
+      setUser(u)
+      const hydrated = await hydrateUserFromSupabase()
+      const finalUser = hydrated || u
+      setUser(finalUser)
+      if (!finalUser.isGuest) {
+        await loadLiveCircle(finalUser)
+        subscribeToCircleUpdates(finalUser)
+      } else {
+        setLiveCircle(MOCK_CIRCLE.slice(0, 3))
+      }
+    }
+    load()
     const update = () => setTime(new Date().toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' }))
     update()
     const t = setInterval(update, 1000)
     return () => clearInterval(t)
   }, [])
+
+  const loadLiveCircle = async (u) => {
+    const circle = u.circle || []
+    if (circle.length === 0) { setLiveCircle([]); return }
+    const codes = circle.map(m => m.inviteCode).filter(Boolean)
+    if (codes.length === 0) { setLiveCircle(circle); return }
+    const { data } = await supabase
+      .from('users')
+      .select('invite_code, status, display_name, disappear_mode')
+      .in('invite_code', codes)
+    if (!data) { setLiveCircle(circle); return }
+    const updated = circle.map(member => {
+      const live = data.find(d => d.invite_code === member.inviteCode)
+      if (!live) return member
+      return { ...member, status: live.disappear_mode ? null : (live.status || null), displayName: live.display_name || member.displayName }
+    })
+    setLiveCircle(updated)
+  }
+
+  const subscribeToCircleUpdates = (u) => {
+    const circle = u.circle || []
+    const codes = circle.map(m => m.inviteCode).filter(Boolean)
+    if (codes.length === 0) return
+
+    const channel = supabase
+      .channel('home_circle_live_' + u.inviteCode)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'users',
+      }, (payload) => {
+        const updated = payload.new
+        setLiveCircle(prev => prev.map(m => {
+          if (m.inviteCode === updated.invite_code) {
+            return { ...m, status: updated.disappear_mode ? null : (updated.status || null), displayName: updated.display_name || m.displayName }
+          }
+          return m
+        }))
+      })
+      .subscribe()
+
+    return () => supabase.removeChannel(channel)
+  }
 
   if (!user) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
@@ -27,26 +86,21 @@ export default function HomePage() {
   )
 
   const isGuest = user.isGuest
-  const circle = isGuest ? MOCK_CIRCLE.slice(0, 3) : (user.circle || [])
+  const circle = isGuest ? MOCK_CIRCLE.slice(0, 3) : liveCircle
   const currentStatus = STATUSES.find(s => s.id === user.currentStatus)
 
   const greet = () => {
     const h = new Date().getHours()
-    if (h >= 5 && h < 12) return 'Good Morning'
-    if (h >= 12 && h < 17) return 'Good Afternoon'
-    if (h >= 17 && h < 22) return 'Good Evening'
-    return 'Good Night'
+    if (h >= 5 && h < 12) return 'Good morning'
+    if (h >= 12 && h < 17) return 'Good afternoon'
+    if (h >= 17 && h < 22) return 'Good evening'
+    return 'Good night'
   }
 
   return (
     <div style={{ maxWidth: 520, margin: '0 auto', background: '#faf9f7', minHeight: '100vh', paddingBottom: 100 }}>
       <Navigation />
-
-      {/* Hero */}
-      <div style={{
-        padding: '108px 28px 28px',
-        background: 'linear-gradient(180deg, #f0ede8 0%, #faf9f7 100%)',
-      }}>
+      <div style={{ padding: '80px 28px 28px', background: 'linear-gradient(180deg, #f0ede8 0%, #faf9f7 100%)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <p style={{ fontSize: 13, color: '#b0a99a', letterSpacing: '0.08em', marginBottom: 4 }}>
@@ -70,15 +124,8 @@ export default function HomePage() {
       </div>
 
       <div style={{ padding: '0 28px' }}>
-
-        {/* Status */}
         <section style={{ marginBottom: 16 }}>
-          <div style={{
-            padding: '22px',
-            background: currentStatus ? currentStatus.bg : '#ffffff',
-            borderRadius: 20,
-            boxShadow: currentStatus ? '0 4px 24px ' + currentStatus.color + '18' : '0 2px 16px rgba(0,0,0,0.05)',
-          }}>
+          <div style={{ padding: '22px', background: currentStatus ? currentStatus.bg : '#ffffff', borderRadius: 20, boxShadow: currentStatus ? '0 4px 24px ' + currentStatus.color + '18' : '0 2px 16px rgba(0,0,0,0.05)' }}>
             {user.currentStatus ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
@@ -96,13 +143,12 @@ export default function HomePage() {
                   <p style={{ fontSize: 16, color: '#6b6b6e', marginBottom: 4 }}>How are you today?</p>
                   <p style={{ fontSize: 13, color: '#b0a99a' }}>Set a status for your circle</p>
                 </div>
-                <Link href="/status" style={{ padding: '10px 20px', background: '#2c2c2e', color: '#faf9f7', borderRadius: 999, textDecoration: 'none', fontSize: 14 }}>Set Status</Link>
+                <Link href="/status" style={{ padding: '10px 20px', background: '#2c2c2e', color: '#faf9f7', borderRadius: 999, textDecoration: 'none', fontSize: 14 }}>set status</Link>
               </div>
             )}
           </div>
         </section>
 
-        {/* Weather */}
         <section style={{ marginBottom: 16 }}>
           <WeatherRoom mood={
             user.currentStatus === 'overwhelmed' ? 'overwhelmed' :
@@ -111,12 +157,10 @@ export default function HomePage() {
           } />
         </section>
 
-        {/* Thought of the moment */}
         <section style={{ marginBottom: 16 }}>
           <DailyThought />
         </section>
 
-        {/* Quick actions */}
         <section style={{ marginBottom: 16 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <Link href="/comfort" style={{ textDecoration: 'none' }}>
@@ -136,7 +180,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Circle */}
         <section style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <p style={{ fontSize: 12, color: '#b0a99a', letterSpacing: '0.08em', textTransform: 'uppercase' }}>your circle</p>
@@ -162,14 +205,19 @@ export default function HomePage() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {circle.map(m => <CircleMember key={m.id} member={m} />)}
+              {circle.map(m => (
+                <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <CircleMember member={m} />
+                  </div>
+                  <SoftReaction myCode={user.inviteCode} memberCode={m.inviteCode} memberName={m.displayName || m.initials} />
+                </div>
+              ))}
             </div>
           )}
         </section>
 
-        {/* Gentle reminder */}
         <GentleReminder />
-
       </div>
     </div>
   )
@@ -187,32 +235,17 @@ function DailyThought() {
   ]
   const thought = thoughts[new Date().getDay() % thoughts.length]
   return (
-    <div style={{
-      padding: '22px 24px',
-      background: 'linear-gradient(135deg, #f5f0eb, #f0ede8)',
-      borderRadius: 18,
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
+    <div style={{ padding: '22px 24px', background: 'linear-gradient(135deg, #f5f0eb, #f0ede8)', borderRadius: 18, position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100, borderRadius: '50%', background: 'rgba(160,144,128,0.08)' }} />
       <p style={{ fontSize: 11, color: '#b0a99a', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>a thought for today</p>
-      <p style={{ fontFamily: 'var(--font-serif)', fontSize: 19, color: '#4a4a4c', lineHeight: 1.6, fontStyle: 'italic', position: 'relative' }}>
-        "{thought}"
-      </p>
+      <p style={{ fontFamily: 'var(--font-serif)', fontSize: 19, color: '#4a4a4c', lineHeight: 1.6, fontStyle: 'italic', position: 'relative' }}>"{thought}"</p>
     </div>
   )
 }
 
 function GentleReminder() {
   return (
-    <div style={{
-      padding: '24px',
-      background: '#ffffff',
-      borderRadius: 18,
-      boxShadow: '0 2px 16px rgba(0,0,0,0.05)',
-      textAlign: 'center',
-      marginBottom: 16,
-    }}>
+    <div style={{ padding: '24px', background: '#ffffff', borderRadius: 18, boxShadow: '0 2px 16px rgba(0,0,0,0.05)', textAlign: 'center', marginBottom: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 16 }}>
         {['◇', '○', '△'].map((s, i) => (
           <span key={i} style={{ fontSize: 20, color: '#d0cdc8', animation: 'softFloat ' + (3 + i) + 's ease-in-out infinite', animationDelay: i * 0.6 + 's', display: 'inline-block' }}>{s}</span>

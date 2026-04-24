@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import Navigation from '../../components/Navigation'
 import { getReflection } from '../../lib/constants'
-import { storage } from '../../lib/store'
+import { storage, saveEchoEntry, hydrateUserFromSupabase } from '../../lib/store'
 
 const REMINDERS = [
   "You don't have to have it all figured out.",
@@ -25,26 +25,29 @@ export default function ComfortPage() {
   const [showHistory, setShowHistory] = useState(false)
 
   useEffect(() => {
-    const history = storage.get('echo_history') || []
-    setEchoHistory(history)
+    const loadHistory = async () => {
+      const user = storage.get('user')
+      if (user && !user.isGuest) {
+        const hydrated = await hydrateUserFromSupabase()
+        setEchoHistory(hydrated?.echoHistory || [])
+      } else {
+        setEchoHistory(storage.get('echo_history') || [])
+      }
+    }
+    loadHistory()
   }, [])
 
-  const reflect = () => {
+  const reflect = async () => {
     if (!text.trim()) return
     setLoading(true)
     setReflection(null)
-    setTimeout(() => {
+    setTimeout(async () => {
       const result = getReflection(text)
       setReflection(result)
       setLoading(false)
-      const entry = {
-        text: text.trim(),
-        reflection: result,
-        timestamp: Date.now(),
-      }
-      const history = [entry, ...(storage.get('echo_history') || [])].slice(0, 50)
-      storage.set('echo_history', history)
-      setEchoHistory(history)
+      const entry = { text: text.trim(), reflection: result, timestamp: Date.now() }
+      await saveEchoEntry(text.trim(), result)
+      setEchoHistory(prev => [entry, ...prev].slice(0, 50))
     }, 900)
   }
 
@@ -72,21 +75,25 @@ export default function ComfortPage() {
     cycle()
   }
 
-  const clearHistory = () => {
+  const clearHistory = async () => {
     storage.remove('echo_history')
+    const user = storage.get('user')
+    if (user && !user.isGuest) {
+      const { updateUser, pushToSupabase } = await import('../../lib/store')
+      const updated = updateUser({ echoHistory: [] })
+      await pushToSupabase(updated)
+    }
     setEchoHistory([])
   }
 
   return (
     <div style={{ maxWidth: 520, margin: '0 auto', background: '#faf9f7', minHeight: '100vh', paddingBottom: 100 }}>
       <Navigation />
-
       <div style={{ padding: '108px 28px 0' }}>
         <p style={{ fontSize: 11, color: '#b0a99a', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>a quiet space</p>
         <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: 36, fontWeight: 400, color: '#2c2c2e', letterSpacing: '-0.02em', marginBottom: 6 }}>Comfort</h1>
         <p style={{ fontSize: 15, color: '#8a8a8e', marginBottom: 28, lineHeight: 1.6 }}>No need to respond. This space is just for you.</p>
 
-        {/* Emotional Echo */}
         <section style={{ marginBottom: 20 }}>
           <div style={{ background: '#ffffff', borderRadius: 20, padding: '26px', boxShadow: '0 2px 20px rgba(0,0,0,0.05)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
@@ -100,7 +107,6 @@ export default function ComfortPage() {
             <p style={{ fontSize: 15, color: '#6b6b6e', marginBottom: 20, lineHeight: 1.7 }}>
               Write a sentence about how you feel. It stays here, between you and this page.
             </p>
-
             <textarea
               value={text}
               onChange={e => setText(e.target.value)}
@@ -110,7 +116,6 @@ export default function ComfortPage() {
               onFocus={e => { e.target.style.borderColor = '#8a9e8c'; e.target.style.background = '#ffffff' }}
               onBlur={e => { e.target.style.borderColor = 'transparent'; e.target.style.background = '#f8f7f4' }}
             />
-
             <button
               onClick={reflect}
               disabled={!text.trim() || loading}
@@ -118,9 +123,8 @@ export default function ComfortPage() {
             >
               {loading ? 'listening...' : 'reflect'}
             </button>
-
             {reflection && (
-              <div style={{ marginTop: 22, padding: '20px 22px', background: 'linear-gradient(135deg, #f0f5f0, #edf2ed)', borderRadius: 16, borderLeft: '3px solid #8a9e8c', animation: 'fadeUp 0.5s ease forwards' }}>
+              <div style={{ marginTop: 22, padding: '20px 22px', background: 'linear-gradient(135deg, #f0f5f0, #edf2ed)', borderRadius: 16, borderLeft: '3px solid #8a9e8c' }}>
                 <p style={{ fontSize: 18, color: '#4a5a4c', lineHeight: 1.75, fontFamily: 'var(--font-serif)', fontStyle: 'italic' }}>
                   {reflection}
                 </p>
@@ -129,7 +133,6 @@ export default function ComfortPage() {
           </div>
         </section>
 
-        {/* Echo History */}
         {showHistory && echoHistory.length > 0 && (
           <section style={{ marginBottom: 20 }}>
             <div style={{ background: '#ffffff', borderRadius: 20, padding: '24px', boxShadow: '0 2px 20px rgba(0,0,0,0.05)' }}>
@@ -156,7 +159,6 @@ export default function ComfortPage() {
           </section>
         )}
 
-        {/* Breathing */}
         <section style={{ marginBottom: 20 }}>
           <div style={{ padding: '32px 24px', background: '#ffffff', borderRadius: 20, boxShadow: '0 2px 16px rgba(0,0,0,0.05)', textAlign: 'center' }}>
             <p style={{ fontSize: 11, color: '#b0a99a', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 24 }}>breathing space</p>
@@ -171,12 +173,11 @@ export default function ComfortPage() {
           </div>
         </section>
 
-        {/* Gentle reminders */}
         <section style={{ marginBottom: 20 }}>
           <p style={{ fontSize: 11, color: '#b0a99a', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 14 }}>gentle reminders</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {REMINDERS.map((reminder, i) => (
-              <div key={i} style={{ padding: '18px 22px', background: '#ffffff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.04)', borderLeft: '3px solid #e8e4de', fontSize: 15, color: '#6b6b6e', lineHeight: 1.6, fontFamily: i % 2 === 0 ? 'var(--font-serif)' : 'var(--font-sans)', animationDelay: i * 0.07 + 's' }} className="fade-up">
+              <div key={i} style={{ padding: '18px 22px', background: '#ffffff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.04)', borderLeft: '3px solid #e8e4de', fontSize: 15, color: '#6b6b6e', lineHeight: 1.6, fontFamily: i % 2 === 0 ? 'var(--font-serif)' : 'var(--font-sans)' }}>
                 {reminder}
               </div>
             ))}

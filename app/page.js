@@ -40,7 +40,7 @@ export default function GuestPage() {
             Stillspace
           </h1>
           <p style={{ fontSize: 17, color: '#8a8a8e', lineHeight: 1.8, maxWidth: 300, margin: '0 auto 32px', animationDelay: '0.2s' }} className="fade-up">
-            A quiet place to share presence, not perform connection.
+            Where the noise ends and the echoes begin..
           </p>
 
           <div style={{ animationDelay: '0.3s', marginBottom: 28 }} className="fade-up">
@@ -52,12 +52,12 @@ export default function GuestPage() {
             onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 36px rgba(44,44,46,0.24)' }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 6px 28px rgba(44,44,46,0.18)' }}
             >
-              enter your space
+              Enter Your Space
             </Link>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap', animationDelay: '0.4s' }} className="fade-up">
-            {['no pressure', 'no followers', 'no urgency'].map((t, i) => (
+            {['No Pressure', 'No Followers', 'No Urgency'].map((t, i) => (
               <span key={i} style={{ padding: '7px 16px', background: '#f0ede8', borderRadius: 999, fontSize: 14, color: '#2c2c2e' }}>{t}</span>
             ))}
           </div>
@@ -86,7 +86,7 @@ export default function GuestPage() {
               No email. No pressure. No timeline.
             </p>
             <Link href="/settings" style={{ display: 'inline-block', padding: '13px 36px', background: '#faf9f7', color: '#2c2c2e', borderRadius: 999, textDecoration: 'none', fontSize: 15, fontWeight: 500 }}>
-              create your space
+              Create Your Space
             </Link>
           </div>
         </div>

@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { initUser, updateUser, signOut, restoreFromSupabaseByEmail, syncUserToSupabase, storage } from '../../lib/store'
+import { initUser, updateUser, signOut, restoreFromSupabaseByEmail, syncUserToSupabase, storage, hydrateUserFromSupabase, pushToSupabase } from '../../lib/store'
 import Navigation from '../../components/Navigation'
 
 export default function SettingsPage() {
@@ -14,9 +14,17 @@ export default function SettingsPage() {
   const [usernameSaved, setUsernameSaved] = useState(false)
 
   useEffect(() => {
-    const u = initUser()
-    setUser(u)
-    setUsername(u.displayName || '')
+    const load = async () => {
+      const u = initUser()
+      setUser(u)
+      setUsername(u.displayName || '')
+      const hydrated = await hydrateUserFromSupabase()
+      if (hydrated) {
+        setUser(hydrated)
+        setUsername(hydrated.displayName || '')
+      }
+    }
+    load()
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
     if (!clientId) return
     const script = document.createElement('script')
@@ -48,7 +56,7 @@ export default function SettingsPage() {
             const updated = updateUser({ isGuest: false, googleLinked: true, email: decoded.email, displayName: decoded.name, avatar: decoded.picture })
             setUser(updated)
             setUsername(updated.displayName || '')
-            syncUserToSupabase(updated)
+            await pushToSupabase(updated)
           }
           setShowOptions(false)
         } catch { setError('Something went wrong. Please try again.') }
@@ -61,15 +69,13 @@ export default function SettingsPage() {
     })
   }
 
-  const handleAnonymous = () => {
+  const handleAnonymous = async () => {
     setSigningUp(true)
-    setTimeout(() => {
-      const updated = updateUser({ isGuest: false })
-      setUser(updated)
-      syncUserToSupabase(updated)
-      setSigningUp(false)
-      setShowOptions(false)
-    }, 1000)
+    const updated = updateUser({ isGuest: false })
+    setUser(updated)
+    await pushToSupabase(updated)
+    setSigningUp(false)
+    setShowOptions(false)
   }
 
   const handleLogout = async () => {
@@ -81,20 +87,20 @@ export default function SettingsPage() {
     setShowOptions(false)
   }
 
-  const handleSaveUsername = () => {
+  const handleSaveUsername = async () => {
     if (!username.trim()) return
     const updated = updateUser({ displayName: username.trim() })
     setUser(updated)
-    syncUserToSupabase(updated)
+    await pushToSupabase(updated)
     setEditingProfile(false)
     setUsernameSaved(true)
     setTimeout(() => setUsernameSaved(false), 2500)
   }
 
-  const update = (key, val) => {
+  const update = async (key, val) => {
     const updated = updateUser({ [key]: val })
     setUser(updated)
-    syncUserToSupabase(updated)
+    await pushToSupabase(updated)
   }
 
   if (!user) return (
@@ -110,7 +116,6 @@ export default function SettingsPage() {
         <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: 30, fontWeight: 400, color: '#2c2c2e', letterSpacing: '-0.02em' }}>Settings</h1>
       </header>
 
-      {/* Account */}
       <section style={{ marginBottom: 20 }}>
         <p style={{ fontSize: 11, color: '#a0a0a3', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14 }}>Account</p>
         <div style={{ background: '#ffffff', borderRadius: 16, padding: 18, boxShadow: '0 2px 20px rgba(0,0,0,0.06)' }}>
@@ -155,7 +160,6 @@ export default function SettingsPage() {
               </div>
               {user.email && <p style={{ fontSize: 13, color: '#a0a0a3', marginLeft: 18, marginBottom: 4 }}>{user.email}</p>}
               <p style={{ fontSize: 12, color: '#c0bdb8', marginLeft: 18, marginBottom: 16, fontFamily: 'monospace', letterSpacing: '0.08em' }}>code: {user.inviteCode}</p>
-
               {showLogoutConfirm ? (
                 <div style={{ padding: '14px', background: '#faf9f7', borderRadius: 12 }}>
                   <p style={{ fontSize: 13, color: '#6b6b6e', marginBottom: 14, lineHeight: 1.6 }}>Your data will be saved. Sign back in with Google to restore everything.</p>
@@ -175,7 +179,6 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Profile editing */}
       {!user.isGuest && (
         <section style={{ marginBottom: 20 }}>
           <p style={{ fontSize: 11, color: '#a0a0a3', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14 }}>Profile</p>
@@ -183,11 +186,7 @@ export default function SettingsPage() {
             {editingProfile ? (
               <div>
                 <p style={{ fontSize: 14, color: '#6b6b6e', marginBottom: 12 }}>Set your display name visible to your circle:</p>
-                <input
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                  placeholder="Your name..."
-                  maxLength={30}
+                <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Your name..." maxLength={30}
                   style={{ width: '100%', padding: '12px 16px', background: '#f8f7f4', border: '1.5px solid transparent', borderRadius: 12, fontSize: 15, color: '#2c2c2e', outline: 'none', marginBottom: 10, transition: 'border-color 0.2s ease' }}
                   onFocus={e => e.target.style.borderColor = '#8a9e8c'}
                   onBlur={e => e.target.style.borderColor = 'transparent'}
@@ -211,7 +210,6 @@ export default function SettingsPage() {
         </section>
       )}
 
-      {/* Presence */}
       <section style={{ marginBottom: 28 }}>
         <p style={{ fontSize: 11, color: '#a0a0a3', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14 }}>Presence</p>
         <div style={{ background: '#ffffff', borderRadius: 16, padding: '6px 18px', boxShadow: '0 2px 20px rgba(0,0,0,0.06)' }}>

@@ -1,10 +1,20 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { storage } from '../lib/store'
 
 export default function Navigation() {
   const path = usePathname()
   const isRoot = path === '/'
+  const [user, setUser] = useState(null)
+
+  useEffect(() => {
+    const loadUser = () => setUser(storage.get('user'))
+    loadUser()
+    const interval = setInterval(loadUser, 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   const SHORTCUTS = [
     { href: '/home',     label: 'Home'     },
@@ -18,6 +28,12 @@ export default function Navigation() {
   const handleBack = () => {
     if (typeof window !== 'undefined') window.history.back()
   }
+
+  const initials = user?.displayName
+    ? user.displayName.slice(0, 2).toUpperCase()
+    : user?.email
+    ? user.email.slice(0, 2).toUpperCase()
+    : '?'
 
   return (
     <>
@@ -44,7 +60,24 @@ export default function Navigation() {
               Stillspace
             </span>
           </Link>
-          <div style={{ width: 32 }} />
+
+          <Link href="/settings" style={{ textDecoration: 'none', flexShrink: 0 }}>
+            {user?.avatar && !user?.isGuest ? (
+              <img src={user.avatar} alt="" style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid rgba(0,0,0,0.08)', display: 'block' }} />
+            ) : (
+              <div style={{
+                width: 30, height: 30, borderRadius: '50%',
+                background: user?.isGuest || !user ? '#f0ede8' : '#e8f0ea',
+                border: '1.5px solid rgba(0,0,0,0.08)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, fontWeight: 500,
+                color: user?.isGuest || !user ? '#b0a99a' : '#6b8a6e',
+                transition: 'all 0.3s ease',
+              }}>
+                {user?.isGuest || !user ? '?' : initials}
+              </div>
+            )}
+          </Link>
         </div>
 
         <div style={{ display: 'flex', gap: 4, padding: '0 12px 8px', overflowX: 'auto', scrollbarWidth: 'none' }}>
