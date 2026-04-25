@@ -10,6 +10,7 @@ export default function AdminPage() {
   const [authorized, setAuthorized] = useState(false)
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState([])
+  const [feedback, setFeedback] = useState([])
   const [stats, setStats] = useState({})
   const [activeTab, setActiveTab] = useState('overview')
   const [searchTerm, setSearchTerm] = useState('')
@@ -20,11 +21,7 @@ export default function AdminPage() {
     const check = async () => {
       const local = storage.get('user')
       if (!local || local.isGuest) { setLoading(false); return }
-      const { data } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', local.id)
-        .single()
+      const { data } = await supabase.from('users').select('*').eq('id', local.id).single()
       if (data?.is_admin) {
         setUser(local)
         setAuthorized(true)
@@ -37,49 +34,59 @@ export default function AdminPage() {
 
   const loadData = async () => {
     const { data: allUsers } = await supabase
-      .from('users')
-      .select('*')
-      .order('updated_at', { ascending: false })
+      .from('users').select('*').order('updated_at', { ascending: false })
     setUsers(allUsers || [])
+
+    const { data: allFeedback } = await supabase
+      .from('feedback').select('*').order('created_at', { ascending: false })
+    setFeedback(allFeedback || [])
+
     const total = allUsers?.length || 0
     const active = allUsers?.filter(u => u.status || u.custom_status_text).length || 0
     const withCircle = allUsers?.filter(u => u.circle_data && u.circle_data !== '[]').length || 0
     const admins = allUsers?.filter(u => u.is_admin).length || 0
-    setStats({ total, active, withCircle, admins })
+    setStats({ total, active, withCircle, admins, feedback: allFeedback?.length || 0 })
   }
 
   const handleDeleteUser = async (userId, inviteCode) => {
     if (!confirm('Delete this user permanently?')) return
-    await supabase.from('messages').delete().or('chat_id.like.' + inviteCode + '_%,chat_id.like.%_' + inviteCode)
     await supabase.from('connections').delete().or('from_code.eq.' + inviteCode + ',to_code.eq.' + inviteCode)
     await supabase.from('reactions').delete().or('from_code.eq.' + inviteCode + ',to_code.eq.' + inviteCode)
     await supabase.from('users').delete().eq('id', userId)
     setUsers(prev => prev.filter(u => u.id !== userId))
     setSelectedUser(null)
-    setActionMsg('User deleted.')
-    setTimeout(() => setActionMsg(null), 3000)
+    showMsg('User deleted.')
   }
 
   const handleToggleAdmin = async (userId, currentAdmin) => {
     await supabase.from('users').update({ is_admin: !currentAdmin }).eq('id', userId)
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, is_admin: !currentAdmin } : u))
     if (selectedUser?.id === userId) setSelectedUser(prev => ({ ...prev, is_admin: !currentAdmin }))
-    setActionMsg(currentAdmin ? 'Admin removed.' : 'Admin granted.')
-    setTimeout(() => setActionMsg(null), 3000)
+    showMsg(currentAdmin ? 'Admin removed.' : 'Admin granted.')
   }
 
   const handleClearStatus = async (userId) => {
     await supabase.from('users').update({ status: null, custom_status_text: null }).eq('id', userId)
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: null, custom_status_text: null } : u))
     if (selectedUser?.id === userId) setSelectedUser(prev => ({ ...prev, status: null, custom_status_text: null }))
-    setActionMsg('Status cleared.')
-    setTimeout(() => setActionMsg(null), 3000)
+    showMsg('Status cleared.')
   }
 
-  const handleClearMessages = async () => {
-    if (!confirm('Delete ALL messages from all users?')) return
-    await supabase.from('messages').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-    setActionMsg('All messages cleared.')
+  const handleDeleteFeedback = async (id) => {
+    await supabase.from('feedback').delete().eq('id', id)
+    setFeedback(prev => prev.filter(f => f.id !== id))
+    showMsg('Feedback deleted.')
+  }
+
+  const handleDeleteAllFeedback = async () => {
+    if (!confirm('Delete all feedback?')) return
+    await supabase.from('feedback').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+    setFeedback([])
+    showMsg('All feedback deleted.')
+  }
+
+  const showMsg = (msg) => {
+    setActionMsg(msg)
     setTimeout(() => setActionMsg(null), 3000)
   }
 
@@ -106,16 +113,13 @@ export default function AdminPage() {
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', background: '#faf9f7', minHeight: '100vh', paddingBottom: 60 }}>
       <Navigation />
-
       <div style={{ padding: '108px 28px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
           <div>
             <p style={{ fontSize: 11, color: '#b0a99a', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>admin</p>
             <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: 32, fontWeight: 400, color: '#2c2c2e', letterSpacing: '-0.02em' }}>Dashboard</h1>
           </div>
-          <button onClick={loadData} style={{ padding: '8px 16px', background: '#f0ede8', border: 'none', borderRadius: 999, fontSize: 13, color: '#6b6b6e', cursor: 'pointer' }}>
-            refresh
-          </button>
+          <button onClick={loadData} style={{ padding: '8px 16px', background: '#f0ede8', border: 'none', borderRadius: 999, fontSize: 13, color: '#6b6b6e', cursor: 'pointer' }}>refresh</button>
         </div>
 
         {actionMsg && (
@@ -125,30 +129,36 @@ export default function AdminPage() {
         )}
 
         {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 24 }}>
           {[
             { label: 'Total Users', value: stats.total },
             { label: 'Active Status', value: stats.active },
             { label: 'Have Circle', value: stats.withCircle },
             { label: 'Admins', value: stats.admins },
+            { label: 'Feedback', value: stats.feedback },
           ].map((s, i) => (
-            <div key={i} style={{ padding: '18px 16px', background: '#ffffff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.05)', textAlign: 'center' }}>
-              <p style={{ fontFamily: 'var(--font-serif)', fontSize: 28, color: '#2c2c2e', marginBottom: 4 }}>{s.value || 0}</p>
-              <p style={{ fontSize: 12, color: '#b0a99a', letterSpacing: '0.04em' }}>{s.label}</p>
+            <div key={i} style={{ padding: '16px 12px', background: '#ffffff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.05)', textAlign: 'center' }}>
+              <p style={{ fontFamily: 'var(--font-serif)', fontSize: 26, color: '#2c2c2e', marginBottom: 4 }}>{s.value || 0}</p>
+              <p style={{ fontSize: 11, color: '#b0a99a', letterSpacing: '0.04em' }}>{s.label}</p>
             </div>
           ))}
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-          {['overview', 'users', 'danger'].map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} style={{ padding: '8px 18px', background: activeTab === tab ? '#2c2c2e' : '#f0ede8', color: activeTab === tab ? '#faf9f7' : '#6b6b6e', border: 'none', borderRadius: 999, fontSize: 13, cursor: 'pointer', transition: 'all 0.2s ease' }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+          {['overview', 'users', 'feedback', 'danger'].map(tab => (
+            <button key={tab} onClick={() => setActiveTab(tab)} style={{ padding: '8px 18px', background: activeTab === tab ? '#2c2c2e' : '#f0ede8', color: activeTab === tab ? '#faf9f7' : '#6b6b6e', border: 'none', borderRadius: 999, fontSize: 13, cursor: 'pointer', transition: 'all 0.2s ease', position: 'relative' }}>
               {tab}
+              {tab === 'feedback' && feedback.length > 0 && (
+                <span style={{ position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderRadius: '50%', background: '#c0392b', color: '#ffffff', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 500 }}>
+                  {feedback.length > 9 ? '9+' : feedback.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
 
-        {/* Overview tab */}
+        {/* Overview */}
         {activeTab === 'overview' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ padding: '20px', background: '#ffffff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
@@ -162,18 +172,35 @@ export default function AdminPage() {
                     <p style={{ fontSize: 14, color: '#2c2c2e', marginBottom: 1 }}>{u.display_name || u.email || 'anonymous'}</p>
                     <p style={{ fontSize: 11, color: '#b0a99a', fontFamily: 'monospace' }}>{u.invite_code}</p>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    {u.status && <span style={{ fontSize: 11, padding: '3px 8px', background: '#f0f5f0', borderRadius: 999, color: '#8a9e8c' }}>{u.status}</span>}
-                    {u.custom_status_text && <span style={{ fontSize: 11, padding: '3px 8px', background: '#f5f0eb', borderRadius: 999, color: '#a09080' }}>custom</span>}
-                    {u.is_admin && <span style={{ fontSize: 11, padding: '3px 8px', background: '#f0eef5', borderRadius: 999, color: '#9a8aaa', marginLeft: 4 }}>admin</span>}
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {u.is_admin && <span style={{ fontSize: 10, padding: '2px 8px', background: '#f0eef5', borderRadius: 999, color: '#9a8aaa' }}>admin</span>}
+                    {(u.status || u.custom_status_text) && <span style={{ fontSize: 10, padding: '2px 8px', background: '#f0f5f0', borderRadius: 999, color: '#8a9e8c' }}>active</span>}
                   </div>
                 </div>
               ))}
             </div>
+
+            {feedback.length > 0 && (
+              <div style={{ padding: '20px', background: '#ffffff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <p style={{ fontSize: 13, color: '#b0a99a', letterSpacing: '0.06em', textTransform: 'uppercase' }}>latest feedback</p>
+                  <button onClick={() => setActiveTab('feedback')} style={{ fontSize: 12, color: '#8a9e8c', background: 'none', border: 'none', cursor: 'pointer' }}>view all →</button>
+                </div>
+                {feedback.slice(0, 3).map((f, i) => (
+                  <div key={i} style={{ padding: '10px 0', borderBottom: i < 2 && i < feedback.slice(0, 3).length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <p style={{ fontSize: 13, color: '#2c2c2e', fontWeight: 500 }}>{f.display_name || 'anonymous'}</p>
+                      <p style={{ fontSize: 11, color: '#c0bdb8' }}>{new Date(f.created_at).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</p>
+                    </div>
+                    <p style={{ fontSize: 13, color: '#6b6b6e', lineHeight: 1.5 }}>{f.message}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        {/* Users tab */}
+        {/* Users */}
         {activeTab === 'users' && (
           <div>
             <input
@@ -184,7 +211,6 @@ export default function AdminPage() {
               onFocus={e => e.target.style.borderColor = '#8a9e8c'}
               onBlur={e => e.target.style.borderColor = 'transparent'}
             />
-
             {selectedUser ? (
               <div style={{ padding: '22px', background: '#ffffff', borderRadius: 18, boxShadow: '0 2px 16px rgba(0,0,0,0.06)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
@@ -194,7 +220,6 @@ export default function AdminPage() {
                   </div>
                   <button onClick={() => setSelectedUser(null)} style={{ background: 'none', border: 'none', fontSize: 18, color: '#b0a99a', cursor: 'pointer' }}>×</button>
                 </div>
-
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
                   {[
                     ['Invite Code', selectedUser.invite_code],
@@ -210,18 +235,13 @@ export default function AdminPage() {
                     </div>
                   ))}
                 </div>
-
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  <button onClick={() => handleClearStatus(selectedUser.id)} style={{ padding: '8px 16px', background: '#f5f0eb', border: 'none', borderRadius: 999, fontSize: 13, color: '#a09080', cursor: 'pointer' }}>
-                    clear status
-                  </button>
+                  <button onClick={() => handleClearStatus(selectedUser.id)} style={{ padding: '8px 16px', background: '#f5f0eb', border: 'none', borderRadius: 999, fontSize: 13, color: '#a09080', cursor: 'pointer' }}>clear status</button>
                   <button onClick={() => handleToggleAdmin(selectedUser.id, selectedUser.is_admin)} style={{ padding: '8px 16px', background: '#f0eef5', border: 'none', borderRadius: 999, fontSize: 13, color: '#9a8aaa', cursor: 'pointer' }}>
                     {selectedUser.is_admin ? 'remove admin' : 'make admin'}
                   </button>
                   {selectedUser.id !== user.id && (
-                    <button onClick={() => handleDeleteUser(selectedUser.id, selectedUser.invite_code)} style={{ padding: '8px 16px', background: '#fdf0ef', border: 'none', borderRadius: 999, fontSize: 13, color: '#c0392b', cursor: 'pointer' }}>
-                      delete user
-                    </button>
+                    <button onClick={() => handleDeleteUser(selectedUser.id, selectedUser.invite_code)} style={{ padding: '8px 16px', background: '#fdf0ef', border: 'none', borderRadius: 999, fontSize: 13, color: '#c0392b', cursor: 'pointer' }}>delete user</button>
                   )}
                 </div>
               </div>
@@ -246,64 +266,113 @@ export default function AdminPage() {
                     </div>
                   </div>
                 ))}
-                {filteredUsers.length === 0 && (
-                  <p style={{ textAlign: 'center', color: '#b0a99a', fontSize: 14, padding: '32px 0' }}>no users found</p>
-                )}
+                {filteredUsers.length === 0 && <p style={{ textAlign: 'center', color: '#b0a99a', fontSize: 14, padding: '32px 0' }}>no users found</p>}
               </div>
             )}
           </div>
         )}
 
-        {/* Danger tab */}
+        {/* Feedback */}
+        {activeTab === 'feedback' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <p style={{ fontSize: 14, color: '#6b6b6e' }}>{feedback.length} {feedback.length === 1 ? 'response' : 'responses'} total</p>
+              {feedback.length > 0 && (
+                <button onClick={handleDeleteAllFeedback} style={{ padding: '7px 14px', background: '#fdf0ef', border: 'none', borderRadius: 999, fontSize: 12, color: '#c0392b', cursor: 'pointer' }}>
+                  delete all
+                </button>
+              )}
+            </div>
+            {feedback.length === 0 ? (
+              <div style={{ padding: '40px 24px', textAlign: 'center', background: '#ffffff', borderRadius: 18, boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
+                <p style={{ fontFamily: 'var(--font-serif)', fontSize: 18, color: '#b0a99a', marginBottom: 6 }}>No feedback yet</p>
+                <p style={{ fontSize: 13, color: '#c0bdb8' }}>When users send feedback it will appear here.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {feedback.map((f, i) => (
+                  <div key={i} style={{ padding: '18px 20px', background: '#ffffff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f0ede8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 500, color: '#8a8a8e', flexShrink: 0 }}>
+                          {(f.display_name || '?').slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <p style={{ fontSize: 14, color: '#2c2c2e', fontWeight: 500 }}>{f.display_name || 'anonymous'}</p>
+                          {f.invite_code && <p style={{ fontSize: 11, color: '#c0bdb8', fontFamily: 'monospace', letterSpacing: '0.06em' }}>{f.invite_code}</p>}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                        <p style={{ fontSize: 11, color: '#c0bdb8' }}>
+                          {new Date(f.created_at).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
+                          {' · '}
+                          {new Date(f.created_at).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                        <button onClick={() => handleDeleteFeedback(f.id)} style={{ width: 24, height: 24, border: '1px solid rgba(0,0,0,0.08)', borderRadius: '50%', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c0bdb8', fontSize: 14, transition: 'all 0.2s ease' }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#c0392b'; e.currentTarget.style.color = '#c0392b' }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(0,0,0,0.08)'; e.currentTarget.style.color = '#c0bdb8' }}
+                        >×</button>
+                      </div>
+                    </div>
+                    <p style={{ fontSize: 14, color: '#4a4a4c', lineHeight: 1.7, fontFamily: 'var(--font-serif)', borderLeft: '3px solid #f0ede8', paddingLeft: 12 }}>
+                      {f.message}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Danger */}
         {activeTab === 'danger' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ padding: '20px', background: '#ffffff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
               <p style={{ fontSize: 13, color: '#b0a99a', marginBottom: 4, letterSpacing: '0.06em', textTransform: 'uppercase' }}>danger zone</p>
               <p style={{ fontSize: 13, color: '#8a8a8e', marginBottom: 18, lineHeight: 1.6 }}>These actions are irreversible. Proceed with caution.</p>
-
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: '#fdf0ef', borderRadius: 12 }}>
-                  <div>
-                    <p style={{ fontSize: 14, color: '#2c2c2e', marginBottom: 2 }}>Clear all messages</p>
-                    <p style={{ fontSize: 12, color: '#b0a99a' }}>Deletes every message from every chat</p>
+                {[
+                  {
+                    label: 'Clear all messages',
+                    desc: 'Deletes every message from every chat',
+                    action: async () => {
+                      if (!confirm('Delete ALL messages?')) return
+                      await supabase.from('messages').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+                      showMsg('All messages cleared.')
+                    }
+                  },
+                  {
+                    label: 'Clear all connections',
+                    desc: 'Removes everyone from everyone\'s circle',
+                    action: async () => {
+                      if (!confirm('Remove ALL connections?')) return
+                      await supabase.from('connections').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+                      await supabase.from('users').update({ circle_data: '[]' }).neq('id', '00000000-0000-0000-0000-000000000000')
+                      showMsg('All connections cleared.')
+                      await loadData()
+                    }
+                  },
+                  {
+                    label: 'Clear all statuses',
+                    desc: 'Resets every user\'s status to none',
+                    action: async () => {
+                      if (!confirm('Clear ALL statuses?')) return
+                      await supabase.from('users').update({ status: null, custom_status_text: null }).neq('id', '00000000-0000-0000-0000-000000000000')
+                      showMsg('All statuses cleared.')
+                      await loadData()
+                    }
+                  },
+                ].map((item, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: '#fdf0ef', borderRadius: 12 }}>
+                    <div>
+                      <p style={{ fontSize: 14, color: '#2c2c2e', marginBottom: 2 }}>{item.label}</p>
+                      <p style={{ fontSize: 12, color: '#b0a99a' }}>{item.desc}</p>
+                    </div>
+                    <button onClick={item.action} style={{ padding: '8px 16px', background: '#c0392b', color: '#ffffff', border: 'none', borderRadius: 999, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: 12 }}>
+                      clear
+                    </button>
                   </div>
-                  <button onClick={handleClearMessages} style={{ padding: '8px 16px', background: '#c0392b', color: '#ffffff', border: 'none', borderRadius: 999, fontSize: 13, cursor: 'pointer' }}>
-                    clear
-                  </button>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: '#fdf0ef', borderRadius: 12 }}>
-                  <div>
-                    <p style={{ fontSize: 14, color: '#2c2c2e', marginBottom: 2 }}>Clear all connections</p>
-                    <p style={{ fontSize: 12, color: '#b0a99a' }}>Removes everyone from everyone's circle</p>
-                  </div>
-                  <button onClick={async () => {
-                    if (!confirm('Remove ALL connections for ALL users?')) return
-                    await supabase.from('connections').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-                    await supabase.from('users').update({ circle_data: '[]' }).neq('id', '00000000-0000-0000-0000-000000000000')
-                    setActionMsg('All connections cleared.')
-                    setTimeout(() => setActionMsg(null), 3000)
-                    await loadData()
-                  }} style={{ padding: '8px 16px', background: '#c0392b', color: '#ffffff', border: 'none', borderRadius: 999, fontSize: 13, cursor: 'pointer' }}>
-                    clear
-                  </button>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: '#fdf0ef', borderRadius: 12 }}>
-                  <div>
-                    <p style={{ fontSize: 14, color: '#2c2c2e', marginBottom: 2 }}>Clear all statuses</p>
-                    <p style={{ fontSize: 12, color: '#b0a99a' }}>Resets every user's status to none</p>
-                  </div>
-                  <button onClick={async () => {
-                    if (!confirm('Clear ALL statuses for ALL users?')) return
-                    await supabase.from('users').update({ status: null, custom_status_text: null }).neq('id', '00000000-0000-0000-0000-000000000000')
-                    setActionMsg('All statuses cleared.')
-                    setTimeout(() => setActionMsg(null), 3000)
-                    await loadData()
-                  }} style={{ padding: '8px 16px', background: '#c0392b', color: '#ffffff', border: 'none', borderRadius: 999, fontSize: 13, cursor: 'pointer' }}>
-                    clear
-                  </button>
-                </div>
+                ))}
               </div>
             </div>
           </div>

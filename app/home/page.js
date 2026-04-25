@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { initUser, hydrateUserFromSupabase } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { MOCK_CIRCLE, STATUSES } from '../../lib/constants'
@@ -7,12 +7,14 @@ import Navigation from '../../components/Navigation'
 import CircleMember from '../../components/CircleMember'
 import GuestBanner from '../../components/GuestBanner'
 import WeatherRoom from '../../components/WeatherRoom'
+
 import Link from 'next/link'
 
 export default function HomePage() {
   const [user, setUser] = useState(null)
   const [time, setTime] = useState('')
   const [liveCircle, setLiveCircle] = useState([])
+  const channelRef = useRef(null)
 
   useEffect(() => {
     const load = async () => {
@@ -22,8 +24,8 @@ export default function HomePage() {
       const finalUser = hydrated || u
       setUser(finalUser)
       if (!finalUser.isGuest) {
-        await loadLiveCircle(finalUser)
-        subscribeToCircleUpdates(finalUser)
+        const live = await loadLiveCircle(finalUser)
+        subscribeToCircleUpdates(finalUser, live)
       } else {
         setLiveCircle(MOCK_CIRCLE.slice(0, 3))
       }
@@ -32,33 +34,44 @@ export default function HomePage() {
     const update = () => setTime(new Date().toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' }))
     update()
     const t = setInterval(update, 1000)
-    return () => clearInterval(t)
+    return () => {
+      clearInterval(t)
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
+    }
   }, [])
 
   const loadLiveCircle = async (u) => {
     const circle = u.circle || []
-    if (circle.length === 0) { setLiveCircle([]); return }
+    if (circle.length === 0) { setLiveCircle([]); return [] }
     const codes = circle.map(m => m.inviteCode).filter(Boolean)
-    if (codes.length === 0) { setLiveCircle(circle); return }
-    const { data, error } = await supabase
+    if (codes.length === 0) { setLiveCircle(circle); return circle }
+    const { data } = await supabase
       .from('users')
-      .select('invite_code, status, display_name, disappear_mode, custom_status_text')
+      .select('invite_code, status, custom_status_text, display_name, disappear_mode')
       .in('invite_code', codes)
-    if (error || !data) { setLiveCircle(circle); return }
+    if (!data) { setLiveCircle(circle); return circle }
     const updated = circle.map(member => {
       const live = data.find(d => d.invite_code === member.inviteCode)
       if (!live) return member
       return {
         ...member,
         status: live.disappear_mode ? null : (live.status || null),
-        displayName: live.display_name || member.displayName,
         customStatusText: live.disappear_mode ? null : (live.custom_status_text || null),
+        displayName: live.display_name || member.displayName,
       }
     })
     setLiveCircle(updated)
+    return updated
   }
 
-  const subscribeToCircleUpdates = (u) => {
+  const subscribeToCircleUpdates = (u, currentCircle) => {
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
+    }
     const channel = supabase
       .channel('home_circle_' + u.inviteCode)
       .on('postgres_changes', {
@@ -72,15 +85,15 @@ export default function HomePage() {
             return {
               ...m,
               status: updated.disappear_mode ? null : (updated.status || null),
-              displayName: updated.display_name || m.displayName,
               customStatusText: updated.disappear_mode ? null : (updated.custom_status_text || null),
+              displayName: updated.display_name || m.displayName,
             }
           }
           return m
         }))
       })
       .subscribe()
-    return () => supabase.removeChannel(channel)
+    channelRef.current = channel
   }
 
   if (!user) return (
@@ -129,12 +142,7 @@ export default function HomePage() {
 
       <div style={{ padding: '0 28px' }}>
         <section style={{ marginBottom: 16 }}>
-          <div style={{
-            padding: '22px',
-            background: user.customStatusText ? '#f5f0eb' : currentStatus ? currentStatus.bg : '#ffffff',
-            borderRadius: 20,
-            boxShadow: currentStatus ? '0 4px 24px ' + currentStatus.color + '18' : '0 2px 16px rgba(0,0,0,0.05)',
-          }}>
+          <div style={{ padding: '22px', background: currentStatus ? currentStatus.bg : user.customStatusText ? '#f5f0eb' : '#ffffff', borderRadius: 20, boxShadow: currentStatus ? '0 4px 24px ' + currentStatus.color + '18' : '0 2px 16px rgba(0,0,0,0.05)' }}>
             {user.currentStatus || user.customStatusText ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
@@ -145,7 +153,7 @@ export default function HomePage() {
                       {user.customStatusText || (currentStatus ? currentStatus.label : '')}
                     </span>
                   </div>
-                  {user.customStatusText && <p style={{ fontSize: 11, color: '#b0a99a', marginTop: 4, marginLeft: 21 }}>custom</p>}
+                  {user.customStatusText && <p style={{ fontSize: 11, color: '#b0a99a', marginTop: 4, marginLeft: 21 }}>custom status</p>}
                 </div>
                 <Link href="/status" style={{ padding: '8px 16px', background: 'rgba(255,255,255,0.65)', border: '1px solid rgba(0,0,0,0.07)', borderRadius: 999, textDecoration: 'none', fontSize: 13, color: '#6b6b6e' }}>change</Link>
               </div>
@@ -217,7 +225,9 @@ export default function HomePage() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {circle.map(m => <CircleMember key={m.id} member={m} />)}
+              {circle.map(m => (
+                <CircleMember key={m.id} member={m} />
+              ))}
             </div>
           )}
         </section>

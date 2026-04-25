@@ -138,13 +138,13 @@ export default function StatusPage() {
               onClick={() => setUseCustom(false)}
               style={{ flex: 1, padding: '10px', background: !useCustom ? '#2c2c2e' : '#f4f3f0', color: !useCustom ? '#faf9f7' : '#6b6b6e', border: 'none', borderRadius: 999, fontSize: 13, cursor: 'pointer', transition: 'all 0.2s ease' }}
             >
-              preset statuses
+              Preset Statuses
             </button>
             <button
               onClick={() => setUseCustom(true)}
               style={{ flex: 1, padding: '10px', background: useCustom ? '#2c2c2e' : '#f4f3f0', color: useCustom ? '#faf9f7' : '#6b6b6e', border: 'none', borderRadius: 999, fontSize: 13, cursor: 'pointer', transition: 'all 0.2s ease' }}
             >
-              write your own
+              Write Your Own
             </button>
           </div>
 

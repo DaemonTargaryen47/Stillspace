@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { initUser, updateUser, signOut, restoreFromSupabaseByEmail, storage, hydrateUserFromSupabase, pushToSupabase } from '../../lib/store'
 import Navigation from '../../components/Navigation'
 import Link from 'next/link'
+import { supabase } from '../../lib/supabase'
 
 export default function SettingsPage() {
   const [user, setUser] = useState(null)
@@ -234,14 +235,96 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* Feedback */}
+      <FeedbackSection user={user} />        
+
       {!user.isGuest && user.email === 'sir.ushno@gmail.com' && (
         <div style={{ textAlign: 'center', marginTop: 8 }}>
-          <Link href="/admin" style={{ fontSize: 11, color: '#c0bdb8', letterSpacing: '0.08em', textTransform: 'uppercase', textDecoration: 'none', borderBottom: '1px solid #e0ddd8', paddingBottom: 2 }}>
+          <Link href="/admin" style={{ fontSize: 11, color: '#1a1a1a', letterSpacing: '0.08em', textTransform: 'uppercase', textDecoration: 'none', borderBottom: '1px solid #e0ddd8', paddingBottom: 2 }}>
             admin dashboard
           </Link>
         </div>
       )}
 
     </div>
+  )
+}
+function FeedbackSection({ user }) {
+  const [open, setOpen] = useState(false)
+  const [message, setMessage] = useState('')
+  const [sent, setSent] = useState(false)
+  const [sending, setSending] = useState(false)
+
+  const handleSend = async () => {
+  if (!message.trim()) return
+  setSending(true)
+  const { data, error } = await supabase.from('feedback').insert({
+    user_id: user?.id || null,
+    invite_code: user?.inviteCode || null,
+    display_name: user?.displayName || user?.email || 'anonymous',
+    message: message.trim(),
+    created_at: new Date().toISOString(),
+  })
+  console.log('feedback result:', data, error)
+  if (error) {
+    console.error('feedback error:', error)
+    alert('Error: ' + error.message)
+    setSending(false)
+    return
+  }
+  setSending(false)
+  setSent(true)
+  setMessage('')
+  setTimeout(() => { setSent(false); setOpen(false) }, 3000)
+}
+
+  return (
+    <section style={{ marginBottom: 20 }}>
+      <div style={{ background: '#ffffff', borderRadius: 16, padding: 18, boxShadow: '0 2px 20px rgba(0,0,0,0.06)' }}>
+        {!open ? (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <p style={{ fontSize: 14, color: '#2c2c2e', marginBottom: 2 }}>Share feedback</p>
+              <p style={{ fontSize: 12, color: '#a0a0a3', lineHeight: 1.5 }}>Thoughts, suggestions, or anything at all.</p>
+            </div>
+            <button onClick={() => setOpen(true)} style={{ padding: '8px 16px', background: '#f8f7f4', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 999, fontSize: 13, color: '#6b6b6e', cursor: 'pointer' }}>
+              open
+            </button>
+          </div>
+        ) : sent ? (
+          <div style={{ textAlign: 'center', padding: '8px 0' }}>
+            <p style={{ fontFamily: 'var(--font-serif)', fontSize: 17, color: '#8a9e8c', marginBottom: 4 }}>Thank you.</p>
+            <p style={{ fontSize: 13, color: '#b0a99a' }}>Your feedback has been received.</p>
+          </div>
+        ) : (
+          <div>
+            <p style={{ fontSize: 14, color: '#6b6b6e', marginBottom: 12, lineHeight: 1.6 }}>
+              What's on your mind? Be as honest as you like.
+            </p>
+            <textarea
+              value={message}
+              onChange={e => setMessage(e.target.value)}
+              placeholder="I think Stillspace could..."
+              rows={4}
+              style={{ width: '100%', padding: '12px 16px', background: '#f8f7f4', border: '1.5px solid transparent', borderRadius: 12, fontSize: 14, color: '#2c2c2e', resize: 'none', outline: 'none', fontFamily: 'var(--font-sans)', lineHeight: 1.6, transition: 'border-color 0.2s ease', marginBottom: 10 }}
+              onFocus={e => e.target.style.borderColor = '#8a9e8c'}
+              onBlur={e => e.target.style.borderColor = 'transparent'}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={handleSend}
+                disabled={!message.trim() || sending}
+                style={{ flex: 1, padding: '10px', background: message.trim() && !sending ? '#2c2c2e' : '#f0ede8', color: message.trim() && !sending ? '#faf9f7' : '#b0a99a', border: 'none', borderRadius: 10, fontSize: 13, cursor: message.trim() ? 'pointer' : 'default', transition: 'all 0.2s ease' }}
+              >
+                {sending ? 'sending...' : 'send feedback'}
+              </button>
+              <button onClick={() => { setOpen(false); setMessage('') }} style={{ padding: '10px 16px', background: 'none', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, fontSize: 13, color: '#a0a0a3', cursor: 'pointer' }}>
+                cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
   )
 }

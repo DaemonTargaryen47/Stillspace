@@ -1,10 +1,42 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { initUser, updateUser } from '../../lib/store'
+import { initUser, updateUser, pushToSupabase, hydrateUserFromSupabase } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import Navigation from '../../components/Navigation'
 import Link from 'next/link'
 import { STATUSES } from '../../lib/constants'
+
+function formatTime(timestamp) {
+  if (!timestamp) return ''
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const lang = typeof navigator !== 'undefined' ? navigator.language : 'en'
+  const msgDate = new Date(timestamp)
+  const now = new Date()
+  const diffMs = now - msgDate
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  const opts = { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: tz }
+
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return diffMins + 'm ago'
+  if (diffHours < 24) return new Intl.DateTimeFormat(lang, opts).format(msgDate)
+  if (diffDays === 1) return 'Yesterday ' + new Intl.DateTimeFormat(lang, opts).format(msgDate)
+  if (diffDays < 7) {
+    const day = new Intl.DateTimeFormat(lang, { weekday: 'short', timeZone: tz }).format(msgDate)
+    return day + ' ' + new Intl.DateTimeFormat(lang, opts).format(msgDate)
+  }
+  const date = new Intl.DateTimeFormat(lang, { month: 'short', day: 'numeric', timeZone: tz }).format(msgDate)
+  return date + ' ' + new Intl.DateTimeFormat(lang, opts).format(msgDate)
+}
+
+function shouldShowTime(messages, index) {
+  if (index === messages.length - 1) return true
+  const curr = new Date(messages[index].created_at)
+  const next = new Date(messages[index + 1].created_at)
+  return (next - curr) > 600000
+}
 
 export default function ChatPage() {
   const [user, setUser] = useState(null)
@@ -14,54 +46,72 @@ export default function ChatPage() {
   const [newMessage, setNewMessage] = useState('')
   const [chatEnabled, setChatEnabled] = useState({})
   const [sending, setSending] = useState(false)
+  const [theirToggles, setTheirToggles] = useState({})
+  const [tz, setTz] = useState('UTC')
   const bottomRef = useRef(null)
+  const channelRef = useRef(null)
 
   useEffect(() => {
-    const u = initUser()
-    setUser(u)
-    setCircle(u.circle || [])
-    setChatEnabled(u.chatToggles || {})
+    setTz(Intl.DateTimeFormat().resolvedOptions().timeZone)
+    const load = async () => {
+      const u = initUser()
+      const hydrated = await hydrateUserFromSupabase()
+      const finalUser = hydrated || u
+      setUser(finalUser)
+      setCircle(finalUser.circle || [])
+      setChatEnabled(finalUser.chatToggles || {})
+      await loadTheirToggles(finalUser)
+    }
+    load()
   }, [])
+
+  const loadTheirToggles = async (u) => {
+    const c = u.circle || []
+    if (!c.length) return
+    const codes = c.map(m => m.inviteCode).filter(Boolean)
+    const { data } = await supabase.from('users').select('invite_code, chat_toggles').in('invite_code', codes)
+    if (!data) return
+    const map = {}
+    data.forEach(d => {
+      const t = d.chat_toggles ? JSON.parse(d.chat_toggles) : {}
+      map[d.invite_code] = t[u.inviteCode] || false
+    })
+    setTheirToggles(map)
+  }
 
   useEffect(() => {
     if (!selectedMember || !user) return
     loadMessages()
     const chatId = getChatId(user.inviteCode, selectedMember.inviteCode)
-    const channel = supabase
-      .channel('messages_' + chatId)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: 'chat_id=eq.' + chatId,
-      }, (payload) => {
-        if (payload.new.sender_code === user.inviteCode) return
-        setMessages(prev => [...prev, payload.new])
-        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
-      })
-      .subscribe()
-    return () => supabase.removeChannel(channel)
+    if (channelRef.current) supabase.removeChannel(channelRef.current)
+    const channel = supabase.channel('chat_' + chatId)
+    channel.on('postgres_changes', {
+      event: 'INSERT', schema: 'public', table: 'messages',
+      filter: 'chat_id=eq.' + chatId,
+    }, (payload) => {
+      if (payload.new.sender_code === user.inviteCode) return
+      setMessages(prev => [...prev, payload.new])
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+    }).subscribe()
+    channelRef.current = channel
+    return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null } }
   }, [selectedMember])
 
-  const getChatId = (code1, code2) => [code1, code2].sort().join('_')
+  const getChatId = (a, b) => [a, b].sort().join('_')
 
   const loadMessages = async () => {
     if (!user || !selectedMember) return
-    const chatId = getChatId(user.inviteCode, selectedMember.inviteCode)
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('chat_id', chatId)
+    const { data } = await supabase.from('messages').select('*')
+      .eq('chat_id', getChatId(user.inviteCode, selectedMember.inviteCode))
       .order('created_at', { ascending: true })
-    if (error) { console.error('Load error:', error); return }
     setMessages(data || [])
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
   }
 
-  const toggleChat = (memberCode) => {
+  const toggleChat = async (memberCode) => {
     const updated = { ...chatEnabled, [memberCode]: !chatEnabled[memberCode] }
     setChatEnabled(updated)
-    updateUser({ chatToggles: updated })
+    await pushToSupabase(updateUser({ chatToggles: updated }))
   }
 
   const sendMessage = async () => {
@@ -69,29 +119,16 @@ export default function ChatPage() {
     if (!text || !user || !selectedMember || sending) return
     setSending(true)
     setNewMessage('')
-    const chatId = getChatId(user.inviteCode, selectedMember.inviteCode)
+    const now = new Date()
     const { error } = await supabase.from('messages').insert({
-      chat_id: chatId,
+      chat_id: getChatId(user.inviteCode, selectedMember.inviteCode),
       sender_code: user.inviteCode,
       content: text,
-      created_at: new Date().toISOString(),
+      created_at: now.toISOString(),
     })
-    if (error) {
-      console.error('Failed:', error)
-      setNewMessage(text)
-    } else {
-      await loadMessages()
-    }
+    if (error) setNewMessage(text)
+    else await loadMessages()
     setSending(false)
-  }
-
-  const formatTime = (timestamp) => {
-    const date = new Date(timestamp)
-    const now = new Date()
-    const isToday = date.toDateString() === now.toDateString()
-    const timeStr = date.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })
-    if (isToday) return timeStr
-    return date.toLocaleDateString('en', { month: 'short', day: 'numeric' }) + ' · ' + timeStr
   }
 
   if (!user) return (
@@ -100,146 +137,141 @@ export default function ChatPage() {
     </div>
   )
 
-  const isChatOn = selectedMember ? chatEnabled[selectedMember.inviteCode] : false
+  const myOn = selectedMember ? (chatEnabled[selectedMember.inviteCode] || false) : false
+  const theirOn = selectedMember ? (theirToggles[selectedMember.inviteCode] || false) : false
 
   return (
     <div style={{ maxWidth: 520, margin: '0 auto', background: '#faf9f7', minHeight: '100vh', paddingBottom: 100 }}>
       <Navigation />
-
       <div style={{ padding: '108px 28px 0' }}>
         <p style={{ fontSize: 11, color: '#b0a99a', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>optional</p>
-        <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: 36, fontWeight: 400, color: '#2c2c2e', letterSpacing: '-0.02em', marginBottom: 6 }}>
-          Quiet Chat
-        </h1>
-        <p style={{ fontSize: 15, color: '#8a8a8e', marginBottom: 24, lineHeight: 1.6 }}>
-          Chat is optional and must be enabled by both people. No read receipts. No pressure.
-        </p>
+        <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: 36, fontWeight: 400, color: '#2c2c2e', letterSpacing: '-0.02em', marginBottom: 6 }}>Quiet Chat</h1>
+        <p style={{ fontSize: 15, color: '#8a8a8e', marginBottom: 24, lineHeight: 1.6 }}>Chat is encrypted. No read receipts. No pressure.</p>
 
         {user.isGuest ? (
           <div style={{ padding: '32px 24px', textAlign: 'center', background: '#ffffff', borderRadius: 18, boxShadow: '0 2px 16px rgba(0,0,0,0.05)' }}>
             <p style={{ fontSize: 16, color: '#6b6b6e', marginBottom: 16, fontFamily: 'var(--font-serif)' }}>Create your space to access quiet chat.</p>
-            <Link href="/settings" style={{ padding: '11px 28px', background: '#2c2c2e', color: '#faf9f7', borderRadius: 999, textDecoration: 'none', fontSize: 14 }}>
-              create your space
-            </Link>
+            <Link href="/settings" style={{ padding: '11px 28px', background: '#2c2c2e', color: '#faf9f7', borderRadius: 999, textDecoration: 'none', fontSize: 14 }}>create your space</Link>
           </div>
         ) : circle.length === 0 ? (
           <div style={{ padding: '32px 24px', textAlign: 'center', background: '#ffffff', borderRadius: 18, boxShadow: '0 2px 16px rgba(0,0,0,0.05)' }}>
             <p style={{ fontSize: 16, color: '#6b6b6e', marginBottom: 16, fontFamily: 'var(--font-serif)' }}>Add people to your circle first.</p>
-            <Link href="/circle" style={{ padding: '11px 28px', background: '#2c2c2e', color: '#faf9f7', borderRadius: 999, textDecoration: 'none', fontSize: 14 }}>
-              go to circle
-            </Link>
+            <Link href="/circle" style={{ padding: '11px 28px', background: '#2c2c2e', color: '#faf9f7', borderRadius: 999, textDecoration: 'none', fontSize: 14 }}>go to circle</Link>
           </div>
-        ) : (
-          <>
-            {!selectedMember && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {circle.map((m, i) => {
-                  const isOn = chatEnabled[m.inviteCode]
-                  const status = STATUSES.find(s => s.id === m.status)
-                  return (
-                    <div key={m.id} style={{ padding: '16px 18px', background: '#ffffff', borderRadius: 16, boxShadow: '0 2px 14px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: '50%', background: status ? status.bg : '#f0ede8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 500, color: status ? status.color : '#b0a99a', flexShrink: 0 }}>
-                        {m.initials || '?'}
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <p style={{ fontSize: 15, color: '#2c2c2e', fontWeight: 500, marginBottom: 2 }}>{m.displayName || m.initials}</p>
-                        <p style={{ fontSize: 12, color: '#b0a99a' }}>chat is {isOn ? 'on' : 'off'}</p>
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <button onClick={() => toggleChat(m.inviteCode)} style={{ width: 44, height: 24, borderRadius: 999, background: isOn ? '#8a9e8c' : 'rgba(0,0,0,0.1)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s ease', flexShrink: 0 }}>
-                          <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'white', position: 'absolute', top: 3, left: isOn ? 23 : 3, transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
-                        </button>
-                        {isOn && (
-                          <button onClick={() => setSelectedMember(m)} style={{ padding: '7px 14px', background: '#2c2c2e', color: '#faf9f7', border: 'none', borderRadius: 999, fontSize: 12, cursor: 'pointer' }}>
-                            open
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-
-            {selectedMember && (
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                  <button onClick={() => { setSelectedMember(null); setMessages([]) }} style={{ background: 'none', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b6b6e', fontSize: 16 }}>←</button>
-                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#f0ede8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 500, color: '#8a8a8e' }}>
-                    {selectedMember.initials || '?'}
+        ) : !selectedMember ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {circle.map((m) => {
+              const isMyOn = chatEnabled[m.inviteCode] || false
+              const isTheirOn = theirToggles[m.inviteCode] || false
+              const status = STATUSES.find(s => s.id === m.status)
+              return (
+                <div key={m.id} style={{ padding: '16px 18px', background: '#ffffff', borderRadius: 16, boxShadow: '0 2px 14px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: status ? status.bg : '#f0ede8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 500, color: status ? status.color : '#b0a99a', flexShrink: 0 }}>
+                    {m.initials || '?'}
                   </div>
-                  <div>
-                    <p style={{ fontSize: 15, color: '#2c2c2e', fontWeight: 500 }}>{selectedMember.displayName || selectedMember.initials}</p>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 15, color: '#2c2c2e', fontWeight: 500, marginBottom: 2 }}>{m.displayName || m.initials}</p>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <p style={{ fontSize: 12, color: isMyOn ? '#8a9e8c' : '#b0a99a' }}>You: {isMyOn ? 'On' : 'Off'}</p>
+                      <span style={{ color: '#d0cdc8' }}>·</span>
+                      <p style={{ fontSize: 12, color: isTheirOn ? '#8a9e8c' : '#b0a99a' }}>Them: {isTheirOn ? 'On' : 'Off'}</p>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button onClick={() => toggleChat(m.inviteCode)} style={{ width: 44, height: 24, borderRadius: 999, background: isMyOn ? '#8a9e8c' : 'rgba(0,0,0,0.1)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s ease', flexShrink: 0 }}>
+                      <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'white', position: 'absolute', top: 3, left: isMyOn ? 23 : 3, transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
+                    </button>
+                    <button onClick={() => setSelectedMember(m)} style={{ padding: '7px 14px', background: '#2c2c2e', color: '#faf9f7', border: 'none', borderRadius: 999, fontSize: 12, cursor: 'pointer' }}>open</button>
                   </div>
                 </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+              <button onClick={() => { setSelectedMember(null); setMessages([]) }} style={{ background: 'none', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b6b6e', fontSize: 16, flexShrink: 0 }}>←</button>
+              <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#f0ede8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 500, color: '#8a8a8e', flexShrink: 0 }}>
+                {selectedMember.initials || '?'}
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 15, color: '#2c2c2e', fontWeight: 500 }}>{selectedMember.displayName || selectedMember.initials}</p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <p style={{ fontSize: 11, color: myOn ? '#8a9e8c' : '#b0a99a' }}>you: {myOn ? 'on' : 'off'}</p>
+                  <span style={{ color: '#d0cdc8', fontSize: 10 }}>·</span>
+                  <p style={{ fontSize: 11, color: theirOn ? '#8a9e8c' : '#c0392b' }}>them: {theirOn ? 'on' : 'off'}</p>
+                </div>
+              </div>
+              <button onClick={() => toggleChat(selectedMember.inviteCode)} style={{ width: 44, height: 24, borderRadius: 999, background: myOn ? '#8a9e8c' : 'rgba(0,0,0,0.1)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s ease', flexShrink: 0 }}>
+                <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'white', position: 'absolute', top: 3, left: myOn ? 23 : 3, transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
+              </button>
+            </div>
 
-                {!isChatOn ? (
-                  <div style={{ padding: '24px', textAlign: 'center', background: '#f8f7f4', borderRadius: 16 }}>
-                    <p style={{ fontSize: 15, color: '#8a8a8e', marginBottom: 8, fontFamily: 'var(--font-serif)' }}>Chat is turned off.</p>
-                    <p style={{ fontSize: 13, color: '#b0a99a' }}>Enable it with the toggle to start chatting.</p>
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ minHeight: 320, maxHeight: 420, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12, padding: '4px 0' }}>
-                      {messages.length === 0 && (
-                        <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                          <p style={{ fontFamily: 'var(--font-serif)', fontSize: 17, color: '#b0a99a', marginBottom: 6 }}>A quiet space between you.</p>
-                          <p style={{ fontSize: 13, color: '#c0bdb8' }}>Say something, or nothing at all.</p>
-                        </div>
-                      )}
-                      {messages.map((msg, i) => {
-                        const isMe = msg.sender_code === user.inviteCode
-                        return (
-                          <div key={i} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', gap: 3, maxWidth: '75%' }}>
-                              <div style={{
-                                padding: '10px 14px',
-                                background: isMe ? '#2c2c2e' : '#ffffff',
-                                color: isMe ? '#faf9f7' : '#2c2c2e',
-                                borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                                fontSize: 15,
-                                lineHeight: 1.5,
-                                boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
-                              }}>
-                                {msg.content}
-                              </div>
-                              <p style={{ fontSize: 10, color: '#c0bdb8', paddingLeft: 4, paddingRight: 4 }}>
-                                {formatTime(msg.created_at)}
-                              </p>
-                            </div>
-                          </div>
-                        )
-                      })}
-                      <div ref={bottomRef} />
-                    </div>
-
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                      <textarea
-                        value={newMessage}
-                        onChange={e => setNewMessage(e.target.value)}
-                        placeholder="Say something gently..."
-                        rows={2}
-                        style={{ flex: 1, padding: '12px 16px', background: '#ffffff', border: '1.5px solid transparent', borderRadius: 14, fontSize: 15, color: '#2c2c2e', resize: 'none', outline: 'none', fontFamily: 'var(--font-sans)', lineHeight: 1.5, boxShadow: '0 2px 12px rgba(0,0,0,0.05)', transition: 'border-color 0.2s ease' }}
-                        onFocus={e => e.target.style.borderColor = '#8a9e8c'}
-                        onBlur={e => e.target.style.borderColor = 'transparent'}
-                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!sending) sendMessage() } }}
-                      />
-                      <button
-                        onClick={sendMessage}
-                        disabled={!newMessage.trim() || sending}
-                        style={{ padding: '12px 16px', background: newMessage.trim() ? '#2c2c2e' : '#f0ede8', color: newMessage.trim() ? '#faf9f7' : '#b0a99a', border: 'none', borderRadius: 14, fontSize: 20, cursor: newMessage.trim() ? 'pointer' : 'default', transition: 'all 0.2s ease', flexShrink: 0 }}
-                      >
-                        ↑
-                      </button>
-                    </div>
-                    <p style={{ fontSize: 11, color: '#c0bdb8', textAlign: 'center', marginTop: 8 }}>
-                      Enter to send · Shift+Enter for new line
-                    </p>
-                  </>
-                )}
+            {!theirOn && (
+              <div style={{ padding: '10px 14px', background: '#fff8f0', borderRadius: 10, marginBottom: 12, borderLeft: '3px solid #e8b89a' }}>
+                <p style={{ fontSize: 13, color: '#a07050', lineHeight: 1.5 }}>
+                  {selectedMember.displayName || 'This person'} has chat turned off. They can still receive your messages.
+                </p>
               </div>
             )}
-          </>
+
+            {!myOn && (
+              <div style={{ padding: '10px 14px', background: '#f8f7f4', borderRadius: 10, marginBottom: 12, borderLeft: '3px solid #d0cdc8' }}>
+                <p style={{ fontSize: 13, color: '#8a8a8e', lineHeight: 1.5 }}>You have chat turned off. Turn it on to send messages.</p>
+              </div>
+            )}
+
+            <div style={{ minHeight: 320, maxHeight: 420, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12, padding: '4px 0' }}>
+              {messages.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                  <p style={{ fontFamily: 'var(--font-serif)', fontSize: 17, color: '#b0a99a', marginBottom: 6 }}>A quiet space between you.</p>
+                  <p style={{ fontSize: 13, color: '#c0bdb8' }}>Say something, or nothing at all.</p>
+                </div>
+              )}
+              {messages.map((msg, i) => {
+                const isMe = msg.sender_code === user.inviteCode
+                const show = shouldShowTime(messages, i)
+                return (
+                  <div key={i}>
+                    <div style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
+                      <div style={{
+                        maxWidth: '75%', padding: '10px 14px',
+                        background: isMe ? '#2c2c2e' : '#ffffff',
+                        color: isMe ? '#faf9f7' : '#2c2c2e',
+                        borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                        fontSize: 15, lineHeight: 1.5,
+                        boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
+                      }}>
+                        {msg.content}
+                      </div>
+                    </div>
+                    {show && (
+                      <p style={{ fontSize: 10, color: '#c0bdb8', textAlign: isMe ? 'right' : 'left', marginTop: 3, paddingLeft: 4, paddingRight: 4 }}>
+                        {formatTime(msg.created_at)}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+              <div ref={bottomRef} />
+            </div>
+
+            {myOn && (
+              <>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                  <textarea value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Say something gently..." rows={2}
+                    style={{ flex: 1, padding: '12px 16px', background: '#ffffff', border: '1.5px solid transparent', borderRadius: 14, fontSize: 15, color: '#2c2c2e', resize: 'none', outline: 'none', fontFamily: 'var(--font-sans)', lineHeight: 1.5, boxShadow: '0 2px 12px rgba(0,0,0,0.05)', transition: 'border-color 0.2s ease' }}
+                    onFocus={e => e.target.style.borderColor = '#8a9e8c'}
+                    onBlur={e => e.target.style.borderColor = 'transparent'}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!sending) sendMessage() } }}
+                  />
+                  <button onClick={sendMessage} disabled={!newMessage.trim() || sending}
+                    style={{ padding: '12px 16px', background: newMessage.trim() ? '#2c2c2e' : '#f0ede8', color: newMessage.trim() ? '#faf9f7' : '#b0a99a', border: 'none', borderRadius: 14, fontSize: 20, cursor: newMessage.trim() ? 'pointer' : 'default', transition: 'all 0.2s ease', flexShrink: 0 }}>↑</button>
+                </div>
+                <p style={{ fontSize: 11, color: '#c0bdb8', textAlign: 'center', marginTop: 8 }}>Enter to send · Shift+Enter for new line</p>
+              </>
+            )}
+          </div>
         )}
       </div>
     </div>

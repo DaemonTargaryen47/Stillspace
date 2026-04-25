@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { initUser, updateUser, connectByCode, hydrateUserFromSupabase, pushToSupabase } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { MOCK_CIRCLE, STATUSES } from '../../lib/constants'
@@ -16,6 +16,7 @@ export default function CirclePage() {
   const [removeConfirm, setRemoveConfirm] = useState(null)
   const [liveCircle, setLiveCircle] = useState([])
   const [loading, setLoading] = useState(false)
+  const channelRef = useRef(null)
 
   useEffect(() => {
     const load = async () => {
@@ -29,6 +30,12 @@ export default function CirclePage() {
       subscribeToUpdates(finalUser)
     }
     load()
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
+    }
   }, [])
 
   const loadLiveCircle = async (u) => {
@@ -38,7 +45,7 @@ export default function CirclePage() {
     const codes = circle.map(m => m.inviteCode).filter(Boolean)
     const { data } = await supabase
       .from('users')
-      .select('invite_code, status, display_name, disappear_mode, custom_status_text')
+      .select('invite_code, status, custom_status_text, display_name, disappear_mode')
       .in('invite_code', codes)
     const updated = circle.map(member => {
       const live = data?.find(d => d.invite_code === member.inviteCode)
@@ -46,8 +53,8 @@ export default function CirclePage() {
       return {
         ...member,
         status: live.disappear_mode ? null : (live.status || null),
-        displayName: live.display_name || member.displayName,
         customStatusText: live.disappear_mode ? null : (live.custom_status_text || null),
+        displayName: live.display_name || member.displayName,
       }
     })
     setLiveCircle(updated)
@@ -55,6 +62,10 @@ export default function CirclePage() {
   }
 
   const subscribeToUpdates = (u) => {
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
+    }
     const channel = supabase
       .channel('circle_page_' + u.inviteCode)
       .on('postgres_changes', {
@@ -65,10 +76,9 @@ export default function CirclePage() {
       }, async (payload) => {
         const remote = payload.new
         const newCircle = remote.circle_data ? JSON.parse(remote.circle_data) : []
-        const localUser = { ...u, circle: newCircle }
         updateUser({ circle: newCircle })
         setUser(prev => ({ ...prev, circle: newCircle }))
-        await loadLiveCircle(localUser)
+        await loadLiveCircle({ ...u, circle: newCircle })
       })
       .on('postgres_changes', {
         event: 'UPDATE',
@@ -81,15 +91,15 @@ export default function CirclePage() {
             return {
               ...m,
               status: updated.disappear_mode ? null : (updated.status || null),
-              displayName: updated.display_name || m.displayName,
               customStatusText: updated.disappear_mode ? null : (updated.custom_status_text || null),
+              displayName: updated.display_name || m.displayName,
             }
           }
           return m
         }))
       })
       .subscribe()
-    return () => supabase.removeChannel(channel)
+    channelRef.current = channel
   }
 
   const copyInvite = () => {
@@ -128,10 +138,7 @@ export default function CirclePage() {
     await pushToSupabase(updated)
     if (memberToRemove?.inviteCode) {
       const { data: theirRecord } = await supabase
-        .from('users')
-        .select('*')
-        .eq('invite_code', memberToRemove.inviteCode)
-        .single()
+        .from('users').select('*').eq('invite_code', memberToRemove.inviteCode).single()
       if (theirRecord?.circle_data) {
         const theirCircle = JSON.parse(theirRecord.circle_data)
         const updatedTheirCircle = theirCircle.filter(m => m.inviteCode !== user.inviteCode)
@@ -180,31 +187,11 @@ export default function CirclePage() {
           </p>
         </div>
 
-        {joinStatus === 'success' && (
-          <div style={{ padding: '14px 18px', background: '#eef5f0', borderRadius: 12, marginBottom: 14, borderLeft: '3px solid #8a9e8c' }}>
-            <p style={{ fontSize: 14, color: '#4a5a4c' }}>Connected. Both circles updated automatically.</p>
-          </div>
-        )}
-        {joinStatus === 'error:notfound' && (
-          <div style={{ padding: '14px 18px', background: '#fdf0ef', borderRadius: 12, marginBottom: 14, borderLeft: '3px solid #c0392b' }}>
-            <p style={{ fontSize: 14, color: '#c0392b' }}>Code not found. Make sure they have created their space first.</p>
-          </div>
-        )}
-        {joinStatus === 'error:own' && (
-          <div style={{ padding: '14px 18px', background: '#fdf0ef', borderRadius: 12, marginBottom: 14, borderLeft: '3px solid #c0392b' }}>
-            <p style={{ fontSize: 14, color: '#c0392b' }}>That is your own code.</p>
-          </div>
-        )}
-        {joinStatus === 'error:full' && (
-          <div style={{ padding: '14px 18px', background: '#fdf0ef', borderRadius: 12, marginBottom: 14, borderLeft: '3px solid #c0392b' }}>
-            <p style={{ fontSize: 14, color: '#c0392b' }}>Your circle is full. Maximum 10 people.</p>
-          </div>
-        )}
-        {joinStatus === 'error:duplicate' && (
-          <div style={{ padding: '14px 18px', background: '#fdf0ef', borderRadius: 12, marginBottom: 14, borderLeft: '3px solid #c0392b' }}>
-            <p style={{ fontSize: 14, color: '#c0392b' }}>This person is already in your circle.</p>
-          </div>
-        )}
+        {joinStatus === 'success' && <div style={{ padding: '14px 18px', background: '#eef5f0', borderRadius: 12, marginBottom: 14, borderLeft: '3px solid #8a9e8c' }}><p style={{ fontSize: 14, color: '#4a5a4c' }}>Connected. Both circles updated automatically.</p></div>}
+        {joinStatus === 'error:notfound' && <div style={{ padding: '14px 18px', background: '#fdf0ef', borderRadius: 12, marginBottom: 14, borderLeft: '3px solid #c0392b' }}><p style={{ fontSize: 14, color: '#c0392b' }}>Code not found. Make sure they have created their space first.</p></div>}
+        {joinStatus === 'error:own' && <div style={{ padding: '14px 18px', background: '#fdf0ef', borderRadius: 12, marginBottom: 14, borderLeft: '3px solid #c0392b' }}><p style={{ fontSize: 14, color: '#c0392b' }}>That is your own code.</p></div>}
+        {joinStatus === 'error:full' && <div style={{ padding: '14px 18px', background: '#fdf0ef', borderRadius: 12, marginBottom: 14, borderLeft: '3px solid #c0392b' }}><p style={{ fontSize: 14, color: '#c0392b' }}>Your circle is full. Maximum 10 people.</p></div>}
+        {joinStatus === 'error:duplicate' && <div style={{ padding: '14px 18px', background: '#fdf0ef', borderRadius: 12, marginBottom: 14, borderLeft: '3px solid #c0392b' }}><p style={{ fontSize: 14, color: '#c0392b' }}>This person is already in your circle.</p></div>}
 
         {!isGuest && (
           <>
@@ -251,20 +238,14 @@ export default function CirclePage() {
           <>
             <p style={{ fontSize: 14, color: '#8a8a8e', marginBottom: 14 }}>A preview of how your circle would look.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
-              {circle.map((m, i) => (
-                <div key={m.id} style={{ animationDelay: i * 0.05 + 's' }} className="fade-up">
-                  <CircleMember member={m} isPreview={true} />
-                </div>
-              ))}
+              {circle.map((m, i) => <div key={m.id} style={{ animationDelay: i * 0.05 + 's' }} className="fade-up"><CircleMember member={m} isPreview={true} /></div>)}
             </div>
             <GuestBanner variant="page" />
           </>
         ) : circle.length === 0 ? (
           <div style={{ padding: '40px 24px', textAlign: 'center', background: '#ffffff', borderRadius: 18, boxShadow: '0 2px 16px rgba(0,0,0,0.05)' }}>
             <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginBottom: 20 }}>
-              {[...Array(3)].map((_, i) => (
-                <div key={i} style={{ width: 44, height: 44, borderRadius: '50%', background: '#f0ede8', border: '2px dashed #d0cdc8', animation: 'breathe ' + (2.5 + i * 0.4) + 's ease-in-out infinite', animationDelay: i * 0.3 + 's' }} />
-              ))}
+              {[...Array(3)].map((_, i) => <div key={i} style={{ width: 44, height: 44, borderRadius: '50%', background: '#f0ede8', border: '2px dashed #d0cdc8', animation: 'breathe ' + (2.5 + i * 0.4) + 's ease-in-out infinite', animationDelay: i * 0.3 + 's' }} />)}
             </div>
             <p style={{ fontFamily: 'var(--font-serif)', fontSize: 20, color: '#4a4a4c', marginBottom: 8 }}>Your circle is quiet</p>
             <p style={{ fontSize: 14, color: '#b0a99a', lineHeight: 1.6 }}>Share your invite code or enter someone else's to begin.</p>
@@ -285,12 +266,8 @@ export default function CirclePage() {
                         {m.customStatusText ? m.customStatusText : m.status ? (STATUSES.find(s => s.id === m.status)?.label || m.status) : 'no status set'}
                       </span>
                     </div>
-                    {m.customStatusText && (
-                      <p style={{ fontSize: 10, color: '#c0bdb8', marginTop: 2, marginLeft: 14, letterSpacing: '0.04em' }}>custom status</p>
-                    )}
-                    {m.inviteCode && (
-                      <p style={{ fontSize: 11, color: '#c0bdb8', marginTop: 3, fontFamily: 'monospace', letterSpacing: '0.06em' }}>code: {m.inviteCode}</p>
-                    )}
+                    {m.customStatusText && <p style={{ fontSize: 10, color: '#c0bdb8', marginTop: 2, marginLeft: 14 }}>custom status</p>}
+                    {m.inviteCode && <p style={{ fontSize: 11, color: '#c0bdb8', marginTop: 3, fontFamily: 'monospace', letterSpacing: '0.06em' }}>code: {m.inviteCode}</p>}
                   </div>
                   {removeConfirm === m.id ? (
                     <div style={{ display: 'flex', gap: 6 }}>
