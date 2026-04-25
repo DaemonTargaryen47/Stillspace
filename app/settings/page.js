@@ -4,6 +4,7 @@ import { initUser, updateUser, signOut, restoreFromSupabaseByEmail, storage, hyd
 import Navigation from '../../components/Navigation'
 import Link from 'next/link'
 import { supabase } from '../../lib/supabase'
+import { useDarkMode } from '../../lib/darkMode'
 
 export default function SettingsPage() {
   const [user, setUser] = useState(null)
@@ -14,6 +15,7 @@ export default function SettingsPage() {
   const [editingProfile, setEditingProfile] = useState(false)
   const [username, setUsername] = useState('')
   const [usernameSaved, setUsernameSaved] = useState(false)
+  const { dark, toggle: toggleDark } = useDarkMode()
 
   useEffect(() => {
     const load = async () => {
@@ -106,26 +108,27 @@ export default function SettingsPage() {
   }
 
   if (!user) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--bg-primary)' }}>
       <p style={{ color: '#a0a0a3', fontSize: 14 }}>loading...</p>
     </div>
   )
 
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', padding: '0 20px 100px', background: '#faf9f7', minHeight: '100vh' }}>
+    <div style={{ maxWidth: 480, margin: '0 auto', padding: '0 20px 100px', background: 'var(--bg-primary)', minHeight: '100vh', transition: 'background 0.3s ease' }}>
       <Navigation />
       <header style={{ padding: '108px 0 28px' }}>
-        <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: 30, fontWeight: 400, color: '#2c2c2e', letterSpacing: '-0.02em' }}>Settings</h1>
+        <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: 30, fontWeight: 400, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>Settings</h1>
       </header>
 
+      {/* Account */}
       <section style={{ marginBottom: 20 }}>
         <p style={{ fontSize: 11, color: '#a0a0a3', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14 }}>Account</p>
-        <div style={{ background: '#ffffff', borderRadius: 16, padding: 18, boxShadow: '0 2px 20px rgba(0,0,0,0.06)' }}>
+        <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 18, boxShadow: 'var(--shadow)' }}>
           {user.isGuest ? (
             showOptions ? (
               <div>
-                <p style={{ fontSize: 14, color: '#6b6b6e', marginBottom: 18, lineHeight: 1.6 }}>Choose how to create your space:</p>
-                <button onClick={handleGoogleSignIn} style={{ width: '100%', padding: '13px 20px', background: '#ffffff', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 10, color: '#2c2c2e' }}>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 18, lineHeight: 1.6 }}>Choose how to create your space:</p>
+                <button onClick={handleGoogleSignIn} style={{ width: '100%', padding: '13px 20px', background: 'var(--bg-card)', border: '1.5px solid var(--border-soft)', borderRadius: 12, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 10, color: 'var(--text-primary)' }}>
                   <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                     <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
                     <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/>
@@ -137,19 +140,19 @@ export default function SettingsPage() {
                 <div id="google-btn-container" style={{ marginBottom: 10 }} />
                 {error && <p style={{ fontSize: 12, color: '#c0392b', marginBottom: 10, padding: '8px 12px', background: '#fdf0ef', borderRadius: 8 }}>{error}</p>}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '14px 0' }}>
-                  <div style={{ flex: 1, height: 1, background: 'rgba(0,0,0,0.06)' }} />
+                  <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
                   <span style={{ fontSize: 12, color: '#a0a0a3' }}>or</span>
-                  <div style={{ flex: 1, height: 1, background: 'rgba(0,0,0,0.06)' }} />
+                  <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
                 </div>
-                <button onClick={handleAnonymous} disabled={signingUp} style={{ width: '100%', padding: '13px 20px', background: '#2c2c2e', border: 'none', borderRadius: 12, fontSize: 14, cursor: 'pointer', color: '#faf9f7', opacity: signingUp ? 0.6 : 1 }}>
+                <button onClick={handleAnonymous} disabled={signingUp} style={{ width: '100%', padding: '13px 20px', background: 'var(--text-primary)', border: 'none', borderRadius: 12, fontSize: 14, cursor: 'pointer', color: 'var(--bg-primary)', opacity: signingUp ? 0.6 : 1 }}>
                   {signingUp ? 'creating your space...' : 'Continue anonymously'}
                 </button>
                 <button onClick={() => { setShowOptions(false); setError(null) }} style={{ background: 'none', border: 'none', fontSize: 12, color: '#a0a0a3', cursor: 'pointer', marginTop: 10, display: 'block', width: '100%', textAlign: 'center' }}>cancel</button>
               </div>
             ) : (
               <>
-                <p style={{ fontSize: 14, color: '#6b6b6e', marginBottom: 14, lineHeight: 1.6 }}>You are in guest mode. Create your space to connect with people you trust.</p>
-                <button onClick={() => setShowOptions(true)} style={{ padding: '12px 24px', background: '#2c2c2e', color: '#faf9f7', border: 'none', borderRadius: 999, fontSize: 14, cursor: 'pointer' }}>create your space</button>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.6 }}>You are in guest mode. Create your space to connect with people you trust.</p>
+                <button onClick={() => setShowOptions(true)} style={{ padding: '12px 24px', background: 'var(--text-primary)', color: 'var(--bg-primary)', border: 'none', borderRadius: 999, fontSize: 14, cursor: 'pointer' }}>create your space</button>
                 <p style={{ fontSize: 11, color: '#a0a0a3', marginTop: 10 }}>No pressure. Come back when you are ready.</p>
               </>
             )
@@ -158,22 +161,22 @@ export default function SettingsPage() {
               {user.avatar && <img src={user.avatar} alt="" style={{ width: 44, height: 44, borderRadius: '50%', marginBottom: 12, display: 'block' }} />}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#8a9e8c', flexShrink: 0 }} />
-                <span style={{ fontSize: 15, color: '#2c2c2e', fontWeight: 500 }}>{user.displayName || 'Your space is active'}</span>
+                <span style={{ fontSize: 15, color: 'var(--text-primary)', fontWeight: 500 }}>{user.displayName || 'Your space is active'}</span>
               </div>
               {user.email && <p style={{ fontSize: 13, color: '#a0a0a3', marginLeft: 18, marginBottom: 4 }}>{user.email}</p>}
-              <p style={{ fontSize: 12, color: '#c0bdb8', marginLeft: 18, marginBottom: 16, fontFamily: 'monospace', letterSpacing: '0.08em' }}>code: {user.inviteCode}</p>
+              <p style={{ fontSize: 12, color: 'var(--text-faint)', marginLeft: 18, marginBottom: 16, fontFamily: 'monospace', letterSpacing: '0.08em' }}>code: {user.inviteCode}</p>
               {showLogoutConfirm ? (
-                <div style={{ padding: '14px', background: '#faf9f7', borderRadius: 12 }}>
-                  <p style={{ fontSize: 13, color: '#6b6b6e', marginBottom: 14, lineHeight: 1.6 }}>Your data will be saved. Sign back in with Google to restore everything.</p>
+                <div style={{ padding: '14px', background: 'var(--bg-secondary)', borderRadius: 12 }}>
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.6 }}>Your data will be saved. Sign back in with Google to restore everything.</p>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={handleLogout} style={{ flex: 1, padding: '10px', background: '#2c2c2e', color: '#faf9f7', border: 'none', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>yes, sign out</button>
-                    <button onClick={() => setShowLogoutConfirm(false)} style={{ flex: 1, padding: '10px', background: 'none', color: '#6b6b6e', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>cancel</button>
+                    <button onClick={handleLogout} style={{ flex: 1, padding: '10px', background: 'var(--text-primary)', color: 'var(--bg-primary)', border: 'none', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>yes, sign out</button>
+                    <button onClick={() => setShowLogoutConfirm(false)} style={{ flex: 1, padding: '10px', background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border-soft)', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>cancel</button>
                   </div>
                 </div>
               ) : (
-                <button onClick={() => setShowLogoutConfirm(true)} style={{ padding: '8px 16px', background: 'none', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 999, fontSize: 13, color: '#a0a0a3', cursor: 'pointer', transition: 'all 0.2s ease' }}
+                <button onClick={() => setShowLogoutConfirm(true)} style={{ padding: '8px 16px', background: 'none', border: '1px solid var(--border-soft)', borderRadius: 999, fontSize: 13, color: '#a0a0a3', cursor: 'pointer', transition: 'all 0.2s ease' }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = '#c0392b'; e.currentTarget.style.color = '#c0392b' }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(0,0,0,0.1)'; e.currentTarget.style.color = '#a0a0a3' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-soft)'; e.currentTarget.style.color = '#a0a0a3' }}
                 >sign out</button>
               )}
             </div>
@@ -181,43 +184,61 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* Profile */}
       {!user.isGuest && (
         <section style={{ marginBottom: 20 }}>
           <p style={{ fontSize: 11, color: '#a0a0a3', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14 }}>Profile</p>
-          <div style={{ background: '#ffffff', borderRadius: 16, padding: 18, boxShadow: '0 2px 20px rgba(0,0,0,0.06)' }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 18, boxShadow: 'var(--shadow)' }}>
             {editingProfile ? (
               <div>
-                <p style={{ fontSize: 14, color: '#6b6b6e', marginBottom: 12 }}>Set your display name visible to your circle:</p>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 12 }}>Set your display name visible to your circle:</p>
                 <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Your name..." maxLength={30}
-                  style={{ width: '100%', padding: '12px 16px', background: '#f8f7f4', border: '1.5px solid transparent', borderRadius: 12, fontSize: 15, color: '#2c2c2e', outline: 'none', marginBottom: 10, transition: 'border-color 0.2s ease' }}
+                  style={{ width: '100%', padding: '12px 16px', background: 'var(--bg-input)', border: '1.5px solid transparent', borderRadius: 12, fontSize: 15, color: 'var(--text-primary)', outline: 'none', marginBottom: 10, transition: 'border-color 0.2s ease' }}
                   onFocus={e => e.target.style.borderColor = '#8a9e8c'}
                   onBlur={e => e.target.style.borderColor = 'transparent'}
                 />
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={handleSaveUsername} style={{ flex: 1, padding: '10px', background: '#2c2c2e', color: '#faf9f7', border: 'none', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>save</button>
-                  <button onClick={() => setEditingProfile(false)} style={{ flex: 1, padding: '10px', background: 'none', color: '#6b6b6e', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>cancel</button>
+                  <button onClick={handleSaveUsername} style={{ flex: 1, padding: '10px', background: 'var(--text-primary)', color: 'var(--bg-primary)', border: 'none', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>save</button>
+                  <button onClick={() => setEditingProfile(false)} style={{ flex: 1, padding: '10px', background: 'none', color: 'var(--text-secondary)', border: '1px solid var(--border-soft)', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>cancel</button>
                 </div>
               </div>
             ) : (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <p style={{ fontSize: 13, color: '#b0a99a', marginBottom: 4 }}>display name</p>
-                  <p style={{ fontSize: 15, color: '#2c2c2e' }}>{user.displayName || 'not set'}</p>
+                  <p style={{ fontSize: 15, color: 'var(--text-primary)' }}>{user.displayName || 'not set'}</p>
                   {usernameSaved && <p style={{ fontSize: 12, color: '#8a9e8c', marginTop: 4 }}>saved</p>}
                 </div>
-                <button onClick={() => setEditingProfile(true)} style={{ padding: '8px 16px', background: '#f8f7f4', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 999, fontSize: 13, color: '#6b6b6e', cursor: 'pointer' }}>edit</button>
+                <button onClick={() => setEditingProfile(true)} style={{ padding: '8px 16px', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 999, fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer' }}>edit</button>
               </div>
             )}
           </div>
         </section>
       )}
 
-      <section style={{ marginBottom: 28 }}>
-        <p style={{ fontSize: 11, color: '#a0a0a3', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14 }}>Presence</p>
-        <div style={{ background: '#ffffff', borderRadius: 16, padding: '6px 18px', boxShadow: '0 2px 20px rgba(0,0,0,0.06)' }}>
+      {/* Appearance */}
+      <section style={{ marginBottom: 20 }}>
+        <p style={{ fontSize: 11, color: '#a0a0a3', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14 }}>Appearance</p>
+        <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: '6px 18px', boxShadow: 'var(--shadow)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px 0' }}>
             <div style={{ flex: 1, paddingRight: 16 }}>
-              <p style={{ fontSize: 14, color: '#2c2c2e', marginBottom: 2 }}>Disappear Mode</p>
+              <p style={{ fontSize: 14, color: 'var(--text-primary)', marginBottom: 2 }}>Dark Mode</p>
+              <p style={{ fontSize: 12, color: '#a0a0a3', lineHeight: 1.5 }}>Easier on the eyes at night.</p>
+            </div>
+            <button onClick={toggleDark} style={{ width: 44, height: 24, borderRadius: 999, background: dark ? '#8a9e8c' : 'rgba(0,0,0,0.1)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s ease', flexShrink: 0 }}>
+              <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'white', position: 'absolute', top: 3, left: dark ? 23 : 3, transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Presence */}
+      <section style={{ marginBottom: 28 }}>
+        <p style={{ fontSize: 11, color: '#a0a0a3', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14 }}>Presence</p>
+        <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: '6px 18px', boxShadow: 'var(--shadow)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px 0' }}>
+            <div style={{ flex: 1, paddingRight: 16 }}>
+              <p style={{ fontSize: 14, color: 'var(--text-primary)', marginBottom: 2 }}>Disappear Mode</p>
               <p style={{ fontSize: 12, color: '#a0a0a3', lineHeight: 1.5 }}>Go invisible. No status updates shared. Nothing disturbed.</p>
             </div>
             <button onClick={() => update('disappearMode', !user.disappearMode)} style={{ width: 44, height: 24, borderRadius: 999, background: user.disappearMode ? '#8a9e8c' : 'rgba(0,0,0,0.1)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s ease', flexShrink: 0 }}>
@@ -227,28 +248,30 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* Quote */}
       <section style={{ marginBottom: 20 }}>
-        <div style={{ padding: 20, background: '#f4f3f0', borderRadius: 16, textAlign: 'center' }}>
-          <p style={{ fontFamily: 'var(--font-serif)', fontSize: 16, color: '#6b6b6e', lineHeight: 1.7 }}>
+        <div style={{ padding: 20, background: 'var(--bg-muted)', borderRadius: 16, textAlign: 'center' }}>
+          <p style={{ fontFamily: 'var(--font-serif)', fontSize: 16, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
             You can come and go freely. No need to respond. This space is yours.
           </p>
         </div>
       </section>
 
       {/* Feedback */}
-      <FeedbackSection user={user} />        
+      <FeedbackSection user={user} />
 
+      {/* Admin link */}
       {!user.isGuest && user.email === 'sir.ushno@gmail.com' && (
         <div style={{ textAlign: 'center', marginTop: 8 }}>
-          <Link href="/admin" style={{ fontSize: 11, color: '#1a1a1a', letterSpacing: '0.08em', textTransform: 'uppercase', textDecoration: 'none', borderBottom: '1px solid #e0ddd8', paddingBottom: 2 }}>
+          <Link href="/admin" style={{ fontSize: 11, color: 'var(--text-faint)', letterSpacing: '0.08em', textTransform: 'uppercase', textDecoration: 'none', borderBottom: '1px solid var(--border-soft)', paddingBottom: 2 }}>
             admin dashboard
           </Link>
         </div>
       )}
-
     </div>
   )
 }
+
 function FeedbackSection({ user }) {
   const [open, setOpen] = useState(false)
   const [message, setMessage] = useState('')
@@ -256,38 +279,32 @@ function FeedbackSection({ user }) {
   const [sending, setSending] = useState(false)
 
   const handleSend = async () => {
-  if (!message.trim()) return
-  setSending(true)
-  const { data, error } = await supabase.from('feedback').insert({
-    user_id: user?.id || null,
-    invite_code: user?.inviteCode || null,
-    display_name: user?.displayName || user?.email || 'anonymous',
-    message: message.trim(),
-    created_at: new Date().toISOString(),
-  })
-  console.log('feedback result:', data, error)
-  if (error) {
-    console.error('feedback error:', error)
-    alert('Error: ' + error.message)
+    if (!message.trim()) return
+    setSending(true)
+    const { error } = await supabase.from('feedback').insert({
+      user_id: user?.id || null,
+      invite_code: user?.inviteCode || null,
+      display_name: user?.displayName || user?.email || 'anonymous',
+      message: message.trim(),
+      created_at: new Date().toISOString(),
+    })
+    if (error) { console.error('feedback error:', error); setSending(false); return }
     setSending(false)
-    return
+    setSent(true)
+    setMessage('')
+    setTimeout(() => { setSent(false); setOpen(false) }, 3000)
   }
-  setSending(false)
-  setSent(true)
-  setMessage('')
-  setTimeout(() => { setSent(false); setOpen(false) }, 3000)
-}
 
   return (
     <section style={{ marginBottom: 20 }}>
-      <div style={{ background: '#ffffff', borderRadius: 16, padding: 18, boxShadow: '0 2px 20px rgba(0,0,0,0.06)' }}>
+      <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 18, boxShadow: 'var(--shadow)' }}>
         {!open ? (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <p style={{ fontSize: 14, color: '#2c2c2e', marginBottom: 2 }}>Share feedback</p>
+              <p style={{ fontSize: 14, color: 'var(--text-primary)', marginBottom: 2 }}>Share feedback</p>
               <p style={{ fontSize: 12, color: '#a0a0a3', lineHeight: 1.5 }}>Thoughts, suggestions, or anything at all.</p>
             </div>
-            <button onClick={() => setOpen(true)} style={{ padding: '8px 16px', background: '#f8f7f4', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 999, fontSize: 13, color: '#6b6b6e', cursor: 'pointer' }}>
+            <button onClick={() => setOpen(true)} style={{ padding: '8px 16px', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 999, fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer' }}>
               open
             </button>
           </div>
@@ -298,27 +315,22 @@ function FeedbackSection({ user }) {
           </div>
         ) : (
           <div>
-            <p style={{ fontSize: 14, color: '#6b6b6e', marginBottom: 12, lineHeight: 1.6 }}>
-              What's on your mind? Be as honest as you like.
-            </p>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.6 }}>What's on your mind? Be as honest as you like.</p>
             <textarea
               value={message}
               onChange={e => setMessage(e.target.value)}
               placeholder="I think Stillspace could..."
               rows={4}
-              style={{ width: '100%', padding: '12px 16px', background: '#f8f7f4', border: '1.5px solid transparent', borderRadius: 12, fontSize: 14, color: '#2c2c2e', resize: 'none', outline: 'none', fontFamily: 'var(--font-sans)', lineHeight: 1.6, transition: 'border-color 0.2s ease', marginBottom: 10 }}
+              style={{ width: '100%', padding: '12px 16px', background: 'var(--bg-input)', border: '1.5px solid transparent', borderRadius: 12, fontSize: 14, color: 'var(--text-primary)', resize: 'none', outline: 'none', fontFamily: 'var(--font-sans)', lineHeight: 1.6, transition: 'border-color 0.2s ease', marginBottom: 10 }}
               onFocus={e => e.target.style.borderColor = '#8a9e8c'}
               onBlur={e => e.target.style.borderColor = 'transparent'}
             />
             <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                onClick={handleSend}
-                disabled={!message.trim() || sending}
-                style={{ flex: 1, padding: '10px', background: message.trim() && !sending ? '#2c2c2e' : '#f0ede8', color: message.trim() && !sending ? '#faf9f7' : '#b0a99a', border: 'none', borderRadius: 10, fontSize: 13, cursor: message.trim() ? 'pointer' : 'default', transition: 'all 0.2s ease' }}
-              >
+              <button onClick={handleSend} disabled={!message.trim() || sending}
+                style={{ flex: 1, padding: '10px', background: message.trim() && !sending ? 'var(--text-primary)' : 'var(--bg-muted)', color: message.trim() && !sending ? 'var(--bg-primary)' : '#b0a99a', border: 'none', borderRadius: 10, fontSize: 13, cursor: message.trim() ? 'pointer' : 'default', transition: 'all 0.2s ease' }}>
                 {sending ? 'sending...' : 'send feedback'}
               </button>
-              <button onClick={() => { setOpen(false); setMessage('') }} style={{ padding: '10px 16px', background: 'none', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, fontSize: 13, color: '#a0a0a3', cursor: 'pointer' }}>
+              <button onClick={() => { setOpen(false); setMessage('') }} style={{ padding: '10px 16px', background: 'none', border: '1px solid var(--border-soft)', borderRadius: 10, fontSize: 13, color: '#a0a0a3', cursor: 'pointer' }}>
                 cancel
               </button>
             </div>

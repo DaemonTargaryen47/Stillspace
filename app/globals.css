@@ -9,16 +9,60 @@ body {
   color: #2c2c2e !important;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
-  font-size: 16px;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+body.dark {
+  background-color: #1a1a1c !important;
+  color: #e8e6e3 !important;
+}
+
+/* Light mode variables */
+:root {
+  --bg-primary: #faf9f7;
+  --bg-secondary: #f4f3f0;
+  --bg-card: #ffffff;
+  --bg-input: #f8f7f4;
+  --bg-muted: #f0ede8;
+  --text-primary: #2c2c2e;
+  --text-secondary: #6b6b6e;
+  --text-muted: #b0a99a;
+  --text-faint: #c0bdb8;
+  --border: rgba(0,0,0,0.06);
+  --border-soft: rgba(0,0,0,0.1);
+  --shadow: 0 2px 16px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 24px rgba(0,0,0,0.08);
+  --sage: #8a9e8c;
+  --hero-bg: linear-gradient(180deg, #f0ede8 0%, #faf9f7 100%);
+}
+
+/* Dark mode variables */
+body.dark {
+  --bg-primary: #1a1a1c;
+  --bg-secondary: #242426;
+  --bg-card: #2a2a2c;
+  --bg-input: #323234;
+  --bg-muted: #2e2e30;
+  --text-primary: #e8e6e3;
+  --text-secondary: #a8a6a3;
+  --text-muted: #787570;
+  --text-faint: #585550;
+  --border: rgba(255,255,255,0.06);
+  --border-soft: rgba(255,255,255,0.1);
+  --shadow: 0 2px 16px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 24px rgba(0,0,0,0.4);
+  --sage: #7a9e7c;
+  --hero-bg: linear-gradient(180deg, #222224 0%, #1a1a1c 100%);
 }
 
 @media (prefers-color-scheme: dark) {
-  body { background-color: #faf9f7 !important; color: #2c2c2e !important; }
+  body { background-color: #faf9f7 !important; }
 }
 
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #d0cdc8; border-radius: 2px; }
+body.dark ::-webkit-scrollbar-thumb { background: #444446; }
 
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(12px); }
@@ -42,11 +86,15 @@ body {
   66% { transform: translateX(-4px) translateY(4px); }
   100% { transform: translateX(0px) translateY(0px); }
 }
+@keyframes floatUp {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(0px); }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; transform: translateX(-50%) translateY(-120px); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-160px); }
+}
 
 .fade-up { animation: fadeUp 0.5s ease both; }
 .fade-in { animation: fadeIn 0.4s ease both; }
 .animate-breathe { animation: breathe 4s ease-in-out infinite; }
 .animate-float { animation: softFloat 5s ease-in-out infinite; }
 .animate-drift { animation: drift 8s ease-in-out infinite; }
-
-
