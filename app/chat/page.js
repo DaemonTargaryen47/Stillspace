@@ -25,6 +25,21 @@ function formatTime(timestamp) {
   return new Intl.DateTimeFormat(lang, { month: 'short', day: 'numeric', timeZone: tz }).format(msgDate) + ' ' + new Intl.DateTimeFormat(lang, opts).format(msgDate)
 }
 
+function formatScheduledTime(timestamp) {
+  if (!timestamp) return ''
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const lang = typeof navigator !== 'undefined' ? navigator.language : 'en'
+  const date = new Date(timestamp)
+  const now = new Date()
+  const diffMs = date - now
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  if (diffMins < 1) return 'sending now...'
+  if (diffMins < 60) return 'sends in ' + diffMins + 'm'
+  if (diffHours < 24) return 'sends at ' + new Intl.DateTimeFormat(lang, { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: tz }).format(date)
+  return 'sends ' + new Intl.DateTimeFormat(lang, { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: true, timeZone: tz }).format(date)
+}
+
 function shouldShowTime(messages, index) {
   if (index === messages.length - 1) return true
   return (new Date(messages[index + 1].created_at) - new Date(messages[index].created_at)) > 600000
@@ -39,8 +54,11 @@ export default function ChatPage() {
   const [chatEnabled, setChatEnabled] = useState({})
   const [sending, setSending] = useState(false)
   const [theirToggles, setTheirToggles] = useState({})
+  const [slowSend, setSlowSend] = useState(false)
+  const [slowHours, setSlowHours] = useState('')
   const bottomRef = useRef(null)
   const channelRef = useRef(null)
+  const scheduledTimerRef = useRef(null)
 
   useEffect(() => {
     const load = async () => {
@@ -54,6 +72,12 @@ export default function ChatPage() {
     }
     load()
   }, [])
+
+  useEffect(() => {
+    if (!selectedMember || !user) return
+    scheduledTimerRef.current = setInterval(() => { loadMessages(true) }, 30000)
+    return () => clearInterval(scheduledTimerRef.current)
+  }, [selectedMember, user])
 
   const loadTheirToggles = async (u) => {
     const c = u.circle || []
@@ -75,22 +99,36 @@ export default function ChatPage() {
     const chatId = getChatId(user.inviteCode, selectedMember.inviteCode)
     if (channelRef.current) supabase.removeChannel(channelRef.current)
     const channel = supabase.channel('chat_' + chatId)
-    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: 'chat_id=eq.' + chatId }, (payload) => {
-      if (payload.new.sender_code === user.inviteCode) return
-      setMessages(prev => [...prev, payload.new])
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+    channel.on('postgres_changes', {
+      event: 'INSERT', schema: 'public', table: 'messages',
+      filter: 'chat_id=eq.' + chatId,
+    }, (payload) => {
+      const msg = payload.new
+      if (msg.sender_code === user.inviteCode) return
+      const isVisible = !msg.is_scheduled || !msg.scheduled_at || new Date(msg.scheduled_at) <= new Date()
+      if (isVisible) {
+        setMessages(prev => [...prev, msg])
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+      }
     }).subscribe()
     channelRef.current = channel
-    return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null } }
+    return () => {
+      if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
+    }
   }, [selectedMember])
 
   const getChatId = (a, b) => [a, b].sort().join('_')
 
-  const loadMessages = async () => {
+  const loadMessages = async (silent = false) => {
     if (!user || !selectedMember) return
-    const { data } = await supabase.from('messages').select('*').eq('chat_id', getChatId(user.inviteCode, selectedMember.inviteCode)).order('created_at', { ascending: true })
-    setMessages(data || [])
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+    const now = new Date().toISOString()
+    const chatId = getChatId(user.inviteCode, selectedMember.inviteCode)
+    const { data: allMine } = await supabase.from('messages').select('*').eq('chat_id', chatId).eq('sender_code', user.inviteCode).order('created_at', { ascending: true })
+    const { data: theirVisible } = await supabase.from('messages').select('*').eq('chat_id', chatId).neq('sender_code', user.inviteCode).or('is_scheduled.eq.false,scheduled_at.lte.' + now).order('created_at', { ascending: true })
+    const combined = [...(allMine || []), ...(theirVisible || [])]
+    combined.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+    setMessages(combined)
+    if (!silent) setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
   }
 
   const toggleChat = async (memberCode) => {
@@ -102,12 +140,35 @@ export default function ChatPage() {
   const sendMessage = async () => {
     const text = newMessage.trim()
     if (!text || !user || !selectedMember || sending) return
+    if (slowSend) {
+      const hours = parseFloat(slowHours)
+      if (!slowHours || isNaN(hours) || hours <= 0) return
+    }
     setSending(true)
     setNewMessage('')
-    const { error } = await supabase.from('messages').insert({ chat_id: getChatId(user.inviteCode, selectedMember.inviteCode), sender_code: user.inviteCode, content: text, created_at: new Date().toISOString() })
+    let scheduledAt = null
+    let isScheduled = false
+    if (slowSend) {
+      isScheduled = true
+      const hours = parseFloat(slowHours)
+      scheduledAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString()
+    }
+    const { error } = await supabase.from('messages').insert({
+      chat_id: getChatId(user.inviteCode, selectedMember.inviteCode),
+      sender_code: user.inviteCode,
+      content: text,
+      created_at: new Date().toISOString(),
+      is_scheduled: isScheduled,
+      scheduled_at: scheduledAt,
+    })
     if (error) setNewMessage(text)
     else await loadMessages()
     setSending(false)
+  }
+
+  const cancelScheduled = async (msgId) => {
+    await supabase.from('messages').delete().eq('id', msgId)
+    setMessages(prev => prev.filter(m => m.id !== msgId))
   }
 
   if (!user) return (
@@ -118,14 +179,15 @@ export default function ChatPage() {
 
   const myOn = selectedMember ? (chatEnabled[selectedMember.inviteCode] || false) : false
   const theirOn = selectedMember ? (theirToggles[selectedMember.inviteCode] || false) : false
+  const slowHoursValid = slowHours && !isNaN(parseFloat(slowHours)) && parseFloat(slowHours) > 0
 
   return (
-    <div className="page-wrap" style={{ maxWidth: 520, margin: '0 auto', minHeight: '100vh', paddingBottom: 100 }}>
+    <div className="page-wrap" style={{ maxWidth: 520, margin: '0 auto', minHeight: '100vh', paddingBottom: 60 }}>
       <Navigation />
       <div style={{ padding: '108px 28px 0' }}>
         <p className="section-label" style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>optional</p>
         <h1 className="text-p" style={{ fontFamily: 'var(--font-serif)', fontSize: 36, fontWeight: 400, letterSpacing: '-0.02em', marginBottom: 6 }}>Quiet Chat</h1>
-        <p className="text-s" style={{ fontSize: 15, marginBottom: 24, lineHeight: 1.6 }}>Chat is optional. No read receipts. No pressure.</p>
+        <p className="text-s" style={{ fontSize: 15, marginBottom: 24, lineHeight: 1.6 }}>Chat is encrypted and optional.</p>
 
         {user.isGuest ? (
           <div className="card" style={{ padding: '32px 24px', textAlign: 'center', borderRadius: 18 }}>
@@ -151,9 +213,9 @@ export default function ChatPage() {
                   <div style={{ flex: 1 }}>
                     <p className="text-p" style={{ fontSize: 15, fontWeight: 500, marginBottom: 2 }}>{m.displayName || m.initials}</p>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <p style={{ fontSize: 12, color: isMyOn ? '#8a9e8c' : '#b0a99a' }}>you: {isMyOn ? 'on' : 'off'}</p>
+                      <p style={{ fontSize: 12, color: isMyOn ? '#8a9e8c' : '#c0392b' }}>You: {isMyOn ? 'On' : 'Off'}</p>
                       <span style={{ color: '#d0cdc8' }}>·</span>
-                      <p style={{ fontSize: 12, color: isTheirOn ? '#8a9e8c' : '#b0a99a' }}>them: {isTheirOn ? 'on' : 'off'}</p>
+                      <p style={{ fontSize: 12, color: isTheirOn ? '#8a9e8c' : '#c0392b' }}>Them: {isTheirOn ? 'On' : 'Off'}</p>
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -169,16 +231,16 @@ export default function ChatPage() {
         ) : (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <button onClick={() => { setSelectedMember(null); setMessages([]) }} className="card" style={{ background: 'none', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>←</button>
+              <button onClick={() => { setSelectedMember(null); setMessages([]); setSlowSend(false); setSlowHours('') }} className="card" style={{ background: 'none', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>←</button>
               <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#f0ede8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 500, color: '#8a8a8e', flexShrink: 0 }}>
                 {selectedMember.initials || '?'}
               </div>
               <div style={{ flex: 1 }}>
                 <p className="text-p" style={{ fontSize: 15, fontWeight: 500 }}>{selectedMember.displayName || selectedMember.initials}</p>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <p style={{ fontSize: 11, color: myOn ? '#8a9e8c' : '#b0a99a' }}>you: {myOn ? 'on' : 'off'}</p>
-                  <span style={{ color: '#d0cdc8', fontSize: 10 }}>·</span>
-                  <p style={{ fontSize: 11, color: theirOn ? '#8a9e8c' : '#c0392b' }}>them: {theirOn ? 'on' : 'off'}</p>
+                  <p style={{ fontSize: 11, color: myOn ? '#8a9e8c' : '#c0392b' }}>You: {myOn ? 'On' : 'Off'}</p>
+                  <span className="text-f" style={{ fontSize: 10 }}>·</span>
+                  <p style={{ fontSize: 11, color: theirOn ? '#8a9e8c' : '#c0392b' }}>Them: {theirOn ? 'On' : 'Off'}</p>
                 </div>
               </div>
               <button onClick={() => toggleChat(selectedMember.inviteCode)} className={myOn ? '' : 'toggle-track-off'} style={{ width: 44, height: 24, borderRadius: 999, background: myOn ? '#8a9e8c' : 'rgba(0,0,0,0.1)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s ease', flexShrink: 0 }}>
@@ -206,15 +268,39 @@ export default function ChatPage() {
               )}
               {messages.map((msg, i) => {
                 const isMe = msg.sender_code === user.inviteCode
+                const isPending = isMe && msg.is_scheduled && msg.scheduled_at && new Date(msg.scheduled_at) > new Date()
                 const show = shouldShowTime(messages, i)
                 return (
-                  <div key={i}>
+                  <div key={msg.id || i}>
                     <div style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
-                      <div className={isMe ? '' : 'msg-bubble-them'} style={{ maxWidth: '75%', padding: '10px 14px', background: isMe ? '#2c2c2e' : '#ffffff', color: isMe ? '#faf9f7' : '#2c2c2e', borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px', fontSize: 15, lineHeight: 1.5, boxShadow: '0 1px 8px rgba(0,0,0,0.06)' }}>
-                        {msg.content}
+                      <div style={{ maxWidth: '75%', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', gap: 4 }}>
+                        {isPending && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                            <span style={{ fontSize: 10, color: '#a09080', background: '#f5f0eb', padding: '2px 8px', borderRadius: 999, letterSpacing: '0.04em' }}>
+                              ⏱ {formatScheduledTime(msg.scheduled_at)}
+                            </span>
+                            <button onClick={() => cancelScheduled(msg.id)} style={{ fontSize: 10, color: '#c0392b', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>cancel</button>
+                          </div>
+                        )}
+                        <div className={isMe ? '' : 'msg-bubble-them'} style={{
+                          padding: '10px 14px',
+                          background: isPending ? '#f5f0eb' : isMe ? '#2c2c2e' : '#ffffff',
+                          color: isPending ? '#a09080' : isMe ? '#faf9f7' : '#2c2c2e',
+                          borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                          fontSize: 15, lineHeight: 1.5,
+                          boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
+                          opacity: isPending ? 0.8 : 1,
+                          borderLeft: isPending ? '3px solid #d4b89a' : 'none',
+                        }}>
+                          {msg.content}
+                        </div>
                       </div>
                     </div>
-                    {show && <p className="text-f" style={{ fontSize: 10, textAlign: isMe ? 'right' : 'left', marginTop: 3, paddingLeft: 4, paddingRight: 4 }}>{formatTime(msg.created_at)}</p>}
+                    {show && !isPending && (
+                      <p className="text-f" style={{ fontSize: 10, textAlign: isMe ? 'right' : 'left', marginTop: 3, paddingLeft: 4, paddingRight: 4 }}>
+                        {formatTime(msg.created_at)}
+                      </p>
+                    )}
                   </div>
                 )
               })}
@@ -223,17 +309,69 @@ export default function ChatPage() {
 
             {myOn && (
               <>
+                {/* Slow send */}
+                <div className="card-muted" style={{ padding: '12px 14px', borderRadius: 12, marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 14 }}>⏱</span>
+                      <div>
+                        <p className="text-p" style={{ fontSize: 13, fontWeight: 500 }}>Slow Send</p>
+                        <p className="text-m" style={{ fontSize: 11 }}>Deliver after a delay</p>
+                      </div>
+                    </div>
+                    <button onClick={() => { setSlowSend(prev => !prev); setSlowHours('') }} className={slowSend ? '' : 'toggle-track-off'} style={{ width: 44, height: 24, borderRadius: 999, background: slowSend ? '#8a9e8c' : 'rgba(0,0,0,0.1)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s ease', flexShrink: 0 }}>
+                      <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'white', position: 'absolute', top: 3, left: slowSend ? 23 : 3, transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
+                    </button>
+                  </div>
+
+                  {slowSend && (
+                    <div style={{ marginTop: 12 }}>
+                      <p className="text-s" style={{ fontSize: 12, marginBottom: 8 }}>Deliver after how many hours?</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <input
+                          type="number"
+                          min="0.5"
+                          step="0.5"
+                          value={slowHours}
+                          onChange={e => setSlowHours(e.target.value)}
+                          placeholder="e.g. 3.5"
+                          className="input-field"
+                          style={{ flex: 1, padding: '9px 14px', border: '1.5px solid transparent', borderRadius: 10, fontSize: 15, outline: 'none', fontFamily: 'var(--font-sans)', transition: 'border-color 0.2s ease' }}
+                          onFocus={e => e.target.style.borderColor = '#8a9e8c'}
+                          onBlur={e => e.target.style.borderColor = 'transparent'}
+                        />
+                        <p className="text-s" style={{ fontSize: 13, whiteSpace: 'nowrap' }}>
+                          {slowHoursValid ? (parseFloat(slowHours) < 1 ? Math.round(parseFloat(slowHours) * 60) + ' mins' : parseFloat(slowHours) + ' hrs') : ''}
+                        </p>
+                      </div>
+                      {slowHoursValid && (
+                        <p className="text-m" style={{ fontSize: 11, marginTop: 6 }}>
+                          Arrives around {new Intl.DateTimeFormat(typeof navigator !== 'undefined' ? navigator.language : 'en', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }).format(new Date(Date.now() + parseFloat(slowHours) * 3600000))}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                  <textarea value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Say something gently..." rows={2}
+                  <textarea value={newMessage} onChange={e => setNewMessage(e.target.value)}
+                    placeholder={slowSend ? 'Write something to send later...' : 'Say something gently...'}
+                    rows={2}
                     className="input-field"
-                    style={{ flex: 1, padding: '12px 16px', border: '1.5px solid transparent', borderRadius: 14, fontSize: 15, resize: 'none', outline: 'none', fontFamily: 'var(--font-sans)', lineHeight: 1.5, transition: 'border-color 0.2s ease' }}
-                    onFocus={e => e.target.style.borderColor = '#8a9e8c'}
-                    onBlur={e => e.target.style.borderColor = 'transparent'}
+                    style={{ flex: 1, padding: '12px 16px', border: slowSend ? '1.5px solid #d4b89a' : '1.5px solid transparent', borderRadius: 14, fontSize: 15, resize: 'none', outline: 'none', fontFamily: 'var(--font-sans)', lineHeight: 1.5, transition: 'border-color 0.2s ease' }}
+                    onFocus={e => { if (!slowSend) e.target.style.borderColor = '#8a9e8c' }}
+                    onBlur={e => { if (!slowSend) e.target.style.borderColor = 'transparent' }}
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!sending) sendMessage() } }}
                   />
-                  <button onClick={sendMessage} disabled={!newMessage.trim() || sending} style={{ padding: '12px 16px', background: newMessage.trim() ? '#2c2c2e' : '#f0ede8', color: newMessage.trim() ? '#faf9f7' : '#b0a99a', border: 'none', borderRadius: 14, fontSize: 20, cursor: newMessage.trim() ? 'pointer' : 'default', transition: 'all 0.2s ease', flexShrink: 0 }}>↑</button>
+                  <button onClick={sendMessage}
+                    disabled={!newMessage.trim() || sending || (slowSend && !slowHoursValid)}
+                    style={{ padding: '12px 16px', background: (slowSend && !slowHoursValid) ? '#f0ede8' : slowSend ? '#a09080' : newMessage.trim() ? '#2c2c2e' : '#f0ede8', color: (newMessage.trim() && (!slowSend || slowHoursValid)) ? '#faf9f7' : '#b0a99a', border: 'none', borderRadius: 14, fontSize: 20, cursor: (newMessage.trim() && (!slowSend || slowHoursValid)) ? 'pointer' : 'default', transition: 'all 0.2s ease', flexShrink: 0 }}>
+                    {slowSend ? '⏱' : '↑'}
+                  </button>
                 </div>
-                <p className="text-f" style={{ fontSize: 11, textAlign: 'center', marginTop: 8 }}>Enter to send · Shift+Enter for new line</p>
+                <p className="text-f" style={{ fontSize: 11, textAlign: 'center', marginTop: 8 }}>
+                  {slowSend && slowHoursValid ? 'Scheduled · recipient sees it after ' + parseFloat(slowHours) + ' hour' + (parseFloat(slowHours) !== 1 ? 's' : '') : slowSend ? 'Enter hours above then write your message' : 'Enter to send · Shift+Enter for new line'}
+                </p>
               </>
             )}
           </div>
