@@ -16,6 +16,7 @@ export default function AdminPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedUser, setSelectedUser] = useState(null)
   const [actionMsg, setActionMsg] = useState(null)
+  const [showAllUsers, setShowAllUsers] = useState(false)
 
   useEffect(() => {
     const check = async () => {
@@ -110,14 +111,16 @@ export default function AdminPage() {
     (u.invite_code || '').toLowerCase().includes(searchTerm.toLowerCase())
   )
 
+  const overviewUsers = showAllUsers ? users : users.slice(0, 5)
+
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto', background: '#faf9f7', minHeight: '100vh', paddingBottom: 60 }}>
+    <div style={{ maxWidth: 800, margin: '0 auto', background: 'var(--bg-primary)', minHeight: '100vh', paddingBottom: 60 }}>
       <Navigation />
       <div style={{ padding: '108px 28px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
           <div>
             <p style={{ fontSize: 11, color: '#b0a99a', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>admin</p>
-            <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: 32, fontWeight: 400, color: '#2c2c2e', letterSpacing: '-0.02em' }}>Dashboard</h1>
+            <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: 32, fontWeight: 400, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>Dashboard</h1>
           </div>
           <button onClick={loadData} style={{ padding: '8px 16px', background: '#f0ede8', border: 'none', borderRadius: 999, fontSize: 13, color: '#6b6b6e', cursor: 'pointer' }}>refresh</button>
         </div>
@@ -137,8 +140,8 @@ export default function AdminPage() {
             { label: 'Admins', value: stats.admins },
             { label: 'Feedback', value: stats.feedback },
           ].map((s, i) => (
-            <div key={i} style={{ padding: '16px 12px', background: '#ffffff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.05)', textAlign: 'center' }}>
-              <p style={{ fontFamily: 'var(--font-serif)', fontSize: 26, color: '#2c2c2e', marginBottom: 4 }}>{s.value || 0}</p>
+            <div key={i} style={{ padding: '16px 12px', background: 'var(--bg-card)', borderRadius: 16, boxShadow: 'var(--shadow)', textAlign: 'center' }}>
+              <p style={{ fontFamily: 'var(--font-serif)', fontSize: 26, color: 'var(--text-primary)', marginBottom: 4 }}>{s.value || 0}</p>
               <p style={{ fontSize: 11, color: '#b0a99a', letterSpacing: '0.04em' }}>{s.label}</p>
             </div>
           ))}
@@ -161,27 +164,53 @@ export default function AdminPage() {
         {/* Overview */}
         {activeTab === 'overview' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ padding: '20px', background: '#ffffff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
-              <p style={{ fontSize: 13, color: '#b0a99a', marginBottom: 14, letterSpacing: '0.06em', textTransform: 'uppercase' }}>recent users</p>
-              {users.slice(0, 5).map((u, i) => (
-                <div key={i} onClick={() => { setSelectedUser(u); setActiveTab('users') }} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < 4 ? '1px solid rgba(0,0,0,0.05)' : 'none', cursor: 'pointer' }}>
-                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#f0ede8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 500, color: '#8a8a8e', flexShrink: 0 }}>
+            <div style={{ padding: '20px', background: 'var(--bg-card)', borderRadius: 16, boxShadow: 'var(--shadow)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <p style={{ fontSize: 13, color: '#b0a99a', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  {showAllUsers ? 'all users (' + users.length + ')' : 'recent users'}
+                </p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => setShowAllUsers(p => !p)}
+                    style={{ fontSize: 12, color: '#8a9e8c', background: showAllUsers ? 'rgba(138,158,140,0.1)' : 'rgba(0,0,0,0.04)', border: 'none', borderRadius: 999, padding: '5px 12px', cursor: 'pointer', transition: 'all 0.2s ease' }}>
+                    {showAllUsers ? 'show less' : 'show all ' + users.length}
+                  </button>
+                  <button onClick={() => setActiveTab('users')} style={{ fontSize: 12, color: '#8a9e8c', background: 'none', border: 'none', cursor: 'pointer' }}>manage →</button>
+                </div>
+              </div>
+
+              {overviewUsers.map((u, i) => (
+                <div key={i} onClick={() => { setSelectedUser(u); setActiveTab('users') }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < overviewUsers.length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none', cursor: 'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
+                  onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                >
+                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: u.is_admin ? '#f0eef5' : '#f0ede8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 500, color: u.is_admin ? '#9a8aaa' : '#8a8a8e', flexShrink: 0 }}>
                     {(u.display_name || u.email || '?').slice(0, 2).toUpperCase()}
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 14, color: '#2c2c2e', marginBottom: 1 }}>{u.display_name || u.email || 'anonymous'}</p>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 14, color: 'var(--text-primary)', marginBottom: 1, fontWeight: 500 }}>{u.display_name || u.email || 'anonymous'}</p>
                     <p style={{ fontSize: 11, color: '#b0a99a', fontFamily: 'monospace' }}>{u.invite_code}</p>
                   </div>
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     {u.is_admin && <span style={{ fontSize: 10, padding: '2px 8px', background: '#f0eef5', borderRadius: 999, color: '#9a8aaa' }}>admin</span>}
                     {(u.status || u.custom_status_text) && <span style={{ fontSize: 10, padding: '2px 8px', background: '#f0f5f0', borderRadius: 999, color: '#8a9e8c' }}>active</span>}
+                    {u.circle_data && u.circle_data !== '[]' && <span style={{ fontSize: 10, padding: '2px 8px', background: '#eef0f5', borderRadius: 999, color: '#8a9aaa' }}>circle</span>}
                   </div>
                 </div>
               ))}
+
+              {!showAllUsers && users.length > 5 && (
+                <div style={{ textAlign: 'center', paddingTop: 12 }}>
+                  <button onClick={() => setShowAllUsers(true)} style={{ fontSize: 13, color: '#8a9e8c', background: 'rgba(138,158,140,0.08)', border: 'none', borderRadius: 999, padding: '8px 20px', cursor: 'pointer' }}>
+                    show all {users.length} users
+                  </button>
+                </div>
+              )}
             </div>
 
             {feedback.length > 0 && (
-              <div style={{ padding: '20px', background: '#ffffff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
+              <div style={{ padding: '20px', background: 'var(--bg-card)', borderRadius: 16, boxShadow: 'var(--shadow)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                   <p style={{ fontSize: 13, color: '#b0a99a', letterSpacing: '0.06em', textTransform: 'uppercase' }}>latest feedback</p>
                   <button onClick={() => setActiveTab('feedback')} style={{ fontSize: 12, color: '#8a9e8c', background: 'none', border: 'none', cursor: 'pointer' }}>view all →</button>
@@ -189,7 +218,7 @@ export default function AdminPage() {
                 {feedback.slice(0, 3).map((f, i) => (
                   <div key={i} style={{ padding: '10px 0', borderBottom: i < 2 && i < feedback.slice(0, 3).length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <p style={{ fontSize: 13, color: '#2c2c2e', fontWeight: 500 }}>{f.display_name || 'anonymous'}</p>
+                      <p style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>{f.display_name || 'anonymous'}</p>
                       <p style={{ fontSize: 11, color: '#c0bdb8' }}>{new Date(f.created_at).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</p>
                     </div>
                     <p style={{ fontSize: 13, color: '#6b6b6e', lineHeight: 1.5 }}>{f.message}</p>
@@ -200,22 +229,19 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Users */}
+        {/* Users tab */}
         {activeTab === 'users' && (
           <div>
-            <input
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              placeholder="Search by name, email or code..."
-              style={{ width: '100%', padding: '12px 16px', background: '#ffffff', border: '1.5px solid transparent', borderRadius: 12, fontSize: 14, color: '#2c2c2e', outline: 'none', marginBottom: 14, boxShadow: '0 2px 12px rgba(0,0,0,0.05)', transition: 'border-color 0.2s ease' }}
+            <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search by name, email or code..."
+              style={{ width: '100%', padding: '12px 16px', background: 'var(--bg-card)', border: '1.5px solid transparent', borderRadius: 12, fontSize: 14, color: 'var(--text-primary)', outline: 'none', marginBottom: 14, boxShadow: 'var(--shadow)', transition: 'border-color 0.2s ease' }}
               onFocus={e => e.target.style.borderColor = '#8a9e8c'}
               onBlur={e => e.target.style.borderColor = 'transparent'}
             />
             {selectedUser ? (
-              <div style={{ padding: '22px', background: '#ffffff', borderRadius: 18, boxShadow: '0 2px 16px rgba(0,0,0,0.06)' }}>
+              <div style={{ padding: '22px', background: 'var(--bg-card)', borderRadius: 18, boxShadow: 'var(--shadow)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
                   <div>
-                    <p style={{ fontSize: 18, color: '#2c2c2e', fontWeight: 500, marginBottom: 2 }}>{selectedUser.display_name || 'No name'}</p>
+                    <p style={{ fontSize: 18, color: 'var(--text-primary)', fontWeight: 500, marginBottom: 2 }}>{selectedUser.display_name || 'No name'}</p>
                     <p style={{ fontSize: 13, color: '#b0a99a' }}>{selectedUser.email || 'no email'}</p>
                   </div>
                   <button onClick={() => setSelectedUser(null)} style={{ background: 'none', border: 'none', fontSize: 18, color: '#b0a99a', cursor: 'pointer' }}>×</button>
@@ -231,7 +257,7 @@ export default function AdminPage() {
                   ].map(([label, value], i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
                       <span style={{ fontSize: 13, color: '#b0a99a' }}>{label}</span>
-                      <span style={{ fontSize: 13, color: '#2c2c2e', fontFamily: label === 'Invite Code' ? 'monospace' : 'inherit', letterSpacing: label === 'Invite Code' ? '0.1em' : 'normal' }}>{value}</span>
+                      <span style={{ fontSize: 13, color: 'var(--text-primary)', fontFamily: label === 'Invite Code' ? 'monospace' : 'inherit', letterSpacing: label === 'Invite Code' ? '0.1em' : 'normal' }}>{value}</span>
                     </div>
                   ))}
                 </div>
@@ -247,22 +273,24 @@ export default function AdminPage() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <p style={{ fontSize: 12, color: '#b0a99a', marginBottom: 4 }}>{filteredUsers.length} {filteredUsers.length === 1 ? 'user' : 'users'}</p>
                 {filteredUsers.map((u, i) => (
-                  <div key={i} onClick={() => setSelectedUser(u)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', background: '#ffffff', borderRadius: 14, boxShadow: '0 2px 10px rgba(0,0,0,0.04)', cursor: 'pointer', transition: 'transform 0.15s ease' }}
-                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                  <div key={i} onClick={() => setSelectedUser(u)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', background: 'var(--bg-card)', borderRadius: 14, boxShadow: 'var(--shadow)', cursor: 'pointer', transition: 'transform 0.15s ease' }}
+                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                    onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
                   >
                     <div style={{ width: 38, height: 38, borderRadius: '50%', background: u.is_admin ? '#f0eef5' : '#f0ede8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 500, color: u.is_admin ? '#9a8aaa' : '#8a8a8e', flexShrink: 0 }}>
                       {(u.display_name || u.email || '?').slice(0, 2).toUpperCase()}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: 14, color: '#2c2c2e', marginBottom: 2, fontWeight: 500 }}>{u.display_name || u.email || 'anonymous'}</p>
+                      <p style={{ fontSize: 14, color: 'var(--text-primary)', marginBottom: 2, fontWeight: 500 }}>{u.display_name || u.email || 'anonymous'}</p>
                       <p style={{ fontSize: 11, color: '#b0a99a', fontFamily: 'monospace', letterSpacing: '0.06em' }}>{u.invite_code}</p>
                     </div>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       {u.is_admin && <span style={{ fontSize: 10, padding: '2px 8px', background: '#f0eef5', borderRadius: 999, color: '#9a8aaa' }}>admin</span>}
                       {(u.status || u.custom_status_text) && <span style={{ fontSize: 10, padding: '2px 8px', background: '#f0f5f0', borderRadius: 999, color: '#8a9e8c' }}>active</span>}
-                      {u.circle_data && u.circle_data !== '[]' && <span style={{ fontSize: 10, padding: '2px 8px', background: '#eef0f5', borderRadius: 999, color: '#8a9aaa' }}>has circle</span>}
+                      {u.circle_data && u.circle_data !== '[]' && <span style={{ fontSize: 10, padding: '2px 8px', background: '#eef0f5', borderRadius: 999, color: '#8a9aaa' }}>circle</span>}
                     </div>
                   </div>
                 ))}
@@ -272,51 +300,45 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Feedback */}
+        {/* Feedback tab */}
         {activeTab === 'feedback' && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <p style={{ fontSize: 14, color: '#6b6b6e' }}>{feedback.length} {feedback.length === 1 ? 'response' : 'responses'} total</p>
               {feedback.length > 0 && (
-                <button onClick={handleDeleteAllFeedback} style={{ padding: '7px 14px', background: '#fdf0ef', border: 'none', borderRadius: 999, fontSize: 12, color: '#c0392b', cursor: 'pointer' }}>
-                  delete all
-                </button>
+                <button onClick={handleDeleteAllFeedback} style={{ padding: '7px 14px', background: '#fdf0ef', border: 'none', borderRadius: 999, fontSize: 12, color: '#c0392b', cursor: 'pointer' }}>delete all</button>
               )}
             </div>
             {feedback.length === 0 ? (
-              <div style={{ padding: '40px 24px', textAlign: 'center', background: '#ffffff', borderRadius: 18, boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
+              <div style={{ padding: '40px 24px', textAlign: 'center', background: 'var(--bg-card)', borderRadius: 18, boxShadow: 'var(--shadow)' }}>
                 <p style={{ fontFamily: 'var(--font-serif)', fontSize: 18, color: '#b0a99a', marginBottom: 6 }}>No feedback yet</p>
                 <p style={{ fontSize: 13, color: '#c0bdb8' }}>When users send feedback it will appear here.</p>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {feedback.map((f, i) => (
-                  <div key={i} style={{ padding: '18px 20px', background: '#ffffff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
+                  <div key={i} style={{ padding: '18px 20px', background: 'var(--bg-card)', borderRadius: 16, boxShadow: 'var(--shadow)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f0ede8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 500, color: '#8a8a8e', flexShrink: 0 }}>
                           {(f.display_name || '?').slice(0, 2).toUpperCase()}
                         </div>
                         <div>
-                          <p style={{ fontSize: 14, color: '#2c2c2e', fontWeight: 500 }}>{f.display_name || 'anonymous'}</p>
+                          <p style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500 }}>{f.display_name || 'anonymous'}</p>
                           {f.invite_code && <p style={{ fontSize: 11, color: '#c0bdb8', fontFamily: 'monospace', letterSpacing: '0.06em' }}>{f.invite_code}</p>}
                         </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                         <p style={{ fontSize: 11, color: '#c0bdb8' }}>
-                          {new Date(f.created_at).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
-                          {' · '}
-                          {new Date(f.created_at).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(f.created_at).toLocaleDateString('en', { month: 'short', day: 'numeric' })} · {new Date(f.created_at).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })}
                         </p>
                         <button onClick={() => handleDeleteFeedback(f.id)} style={{ width: 24, height: 24, border: '1px solid rgba(0,0,0,0.08)', borderRadius: '50%', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c0bdb8', fontSize: 14, transition: 'all 0.2s ease' }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#c0392b'; e.currentTarget.style.color = '#c0392b' }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(0,0,0,0.08)'; e.currentTarget.style.color = '#c0bdb8' }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = '#c0392b'; e.currentTarget.style.color = '#c0392b' }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(0,0,0,0.08)'; e.currentTarget.style.color = '#c0bdb8' }}
                         >×</button>
                       </div>
                     </div>
-                    <p style={{ fontSize: 14, color: '#4a4a4c', lineHeight: 1.7, fontFamily: 'var(--font-serif)', borderLeft: '3px solid #f0ede8', paddingLeft: 12 }}>
-                      {f.message}
-                    </p>
+                    <p style={{ fontSize: 14, color: '#4a4a4c', lineHeight: 1.7, fontFamily: 'var(--font-serif)', borderLeft: '3px solid #f0ede8', paddingLeft: 12 }}>{f.message}</p>
                   </div>
                 ))}
               </div>
@@ -324,10 +346,10 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Danger */}
+        {/* Danger tab */}
         {activeTab === 'danger' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ padding: '20px', background: '#ffffff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
+            <div style={{ padding: '20px', background: 'var(--bg-card)', borderRadius: 16, boxShadow: 'var(--shadow)' }}>
               <p style={{ fontSize: 13, color: '#b0a99a', marginBottom: 4, letterSpacing: '0.06em', textTransform: 'uppercase' }}>danger zone</p>
               <p style={{ fontSize: 13, color: '#8a8a8e', marginBottom: 18, lineHeight: 1.6 }}>These actions are irreversible. Proceed with caution.</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -368,9 +390,7 @@ export default function AdminPage() {
                       <p style={{ fontSize: 14, color: '#2c2c2e', marginBottom: 2 }}>{item.label}</p>
                       <p style={{ fontSize: 12, color: '#b0a99a' }}>{item.desc}</p>
                     </div>
-                    <button onClick={item.action} style={{ padding: '8px 16px', background: '#c0392b', color: '#ffffff', border: 'none', borderRadius: 999, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: 12 }}>
-                      clear
-                    </button>
+                    <button onClick={item.action} style={{ padding: '8px 16px', background: '#c0392b', color: '#ffffff', border: 'none', borderRadius: 999, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: 12 }}>clear</button>
                   </div>
                 ))}
               </div>
