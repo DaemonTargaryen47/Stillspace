@@ -40,11 +40,20 @@ export default function CirclePage() {
     const circle = u.circle || []
     if (!circle.length) { setLiveCircle([]); setLoading(false); return }
     const codes = circle.map(m => m.inviteCode).filter(Boolean)
-    const { data } = await supabase.from('users').select('invite_code, status, custom_status_text, display_name, disappear_mode').in('invite_code', codes)
+    const { data } = await supabase
+      .from('users')
+      .select('invite_code, status, custom_status_text, display_name, disappear_mode')
+      .in('invite_code', codes)
     const updated = circle.map(member => {
       const live = data?.find(d => d.invite_code === member.inviteCode)
       if (!live) return member
-      return { ...member, status: live.disappear_mode ? null : (live.status || null), customStatusText: live.disappear_mode ? null : (live.custom_status_text || null), displayName: live.display_name || member.displayName }
+      return {
+        ...member,
+        status: live.disappear_mode ? null : (live.status || null),
+        customStatusText: live.disappear_mode ? null : (live.custom_status_text || null),
+        displayName: live.display_name || member.displayName,
+        disappearMode: live.disappear_mode || false,
+      }
     })
     setLiveCircle(updated)
     setLoading(false)
@@ -52,16 +61,33 @@ export default function CirclePage() {
 
   const subscribeToUpdates = (u) => {
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
-    const channel = supabase.channel('circle_page_' + u.inviteCode)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users', filter: 'invite_code=eq.' + u.inviteCode }, async (payload) => {
+    const channel = supabase
+      .channel('circle_page_' + u.inviteCode)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'users',
+        filter: 'invite_code=eq.' + u.inviteCode,
+      }, async (payload) => {
         const newCircle = payload.new.circle_data ? JSON.parse(payload.new.circle_data) : []
         updateUser({ circle: newCircle })
         setUser(prev => ({ ...prev, circle: newCircle }))
         await loadLiveCircle({ ...u, circle: newCircle })
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, (payload) => {
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'users',
+      }, (payload) => {
         const updated = payload.new
-        setLiveCircle(prev => prev.map(m => m.inviteCode === updated.invite_code ? { ...m, status: updated.disappear_mode ? null : (updated.status || null), customStatusText: updated.disappear_mode ? null : (updated.custom_status_text || null), displayName: updated.display_name || m.displayName } : m))
+        setLiveCircle(prev => prev.map(m => {
+          if (m.inviteCode === updated.invite_code) {
+            return {
+              ...m,
+              status: updated.disappear_mode ? null : (updated.status || null),
+              customStatusText: updated.disappear_mode ? null : (updated.custom_status_text || null),
+              displayName: updated.display_name || m.displayName,
+              disappearMode: updated.disappear_mode || false,
+            }
+          }
+          return m
+        }))
       })
       .subscribe()
     channelRef.current = channel
@@ -122,7 +148,7 @@ export default function CirclePage() {
       <div style={{ padding: '108px 28px 0' }}>
         <p className="section-label" style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>your people</p>
         <h1 className="text-p" style={{ fontFamily: 'var(--font-serif)', fontSize: 36, fontWeight: 400, letterSpacing: '-0.02em', marginBottom: 6 }}>Your Circle</h1>
-        <p className="text-s" style={{ fontSize: 15, marginBottom: 24, lineHeight: 1.6 }}>Up to 10 trusted people. No more, no less.</p>
+        <p className="text-s" style={{ fontSize: 15, marginBottom: 24, lineHeight: 1.6 }}>Add up to 10 trusted people.</p>
 
         <div className="gradient-card" style={{ padding: '24px', borderRadius: 20, marginBottom: 16, position: 'relative', overflow: 'hidden' }}>
           <div style={{ position: 'absolute', top: -30, right: -30, width: 140, height: 140, borderRadius: '50%', background: 'rgba(138,158,140,0.08)' }} />
@@ -211,24 +237,13 @@ export default function CirclePage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {circle.map((m, i) => (
               <div key={m.id} style={{ animationDelay: i * 0.05 + 's' }} className="fade-up">
-                <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', borderRadius: 16 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: STATUSES[i % STATUSES.length].bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 500, color: STATUSES[i % STATUSES.length].color, flexShrink: 0 }}>
-                    {m.initials || '?'}
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ flex: 1 }}>
-                    {m.displayName && <p className="text-p" style={{ fontSize: 14, fontWeight: 500, marginBottom: 2 }}>{m.displayName}</p>}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: (m.status || m.customStatusText) ? '#8a9e8c' : '#d0cdc8', flexShrink: 0 }} />
-                      <span className="text-s" style={{ fontSize: 13 }}>
-                        {m.customStatusText ? m.customStatusText : m.status ? (STATUSES.find(s => s.id === m.status)?.label || m.status) : 'no status set'}
-                      </span>
-                    </div>
-                    {m.customStatusText && <p className="text-f" style={{ fontSize: 10, marginTop: 2, marginLeft: 14 }}>custom status</p>}
-                    {m.inviteCode && <p className="text-f" style={{ fontSize: 11, marginTop: 3, fontFamily: 'monospace', letterSpacing: '0.06em' }}>code: {m.inviteCode}</p>}
+                    <CircleMember member={m} />
                   </div>
                   {removeConfirm === m.id ? (
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={() => handleRemove(m.id)} style={{ padding: '6px 12px', background: '#c0392b', color: '#ffffff', border: 'none', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>remove</button>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      <button onClick={() => handleRemove(m.id)} style={{ padding: '6px 12px', background: '#c0392b', color: '#ffffff', border: 'none', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>remove from circle</button>
                       <button onClick={() => setRemoveConfirm(null)} style={{ padding: '6px 12px', background: '#f0ede8', color: '#6b6b6e', border: 'none', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>cancel</button>
                     </div>
                   ) : (

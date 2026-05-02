@@ -4,7 +4,6 @@ import { initUser, hydrateUserFromSupabase } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { MOCK_CIRCLE, STATUSES } from '../../lib/constants'
 import Navigation from '../../components/Navigation'
-import CircleMember from '../../components/CircleMember'
 import GuestBanner from '../../components/GuestBanner'
 import WeatherRoom from '../../components/WeatherRoom'
 import Link from 'next/link'
@@ -12,7 +11,6 @@ import Link from 'next/link'
 export default function HomePage() {
   const [user, setUser] = useState(null)
   const [time, setTime] = useState('')
-  const [liveCircle, setLiveCircle] = useState([])
   const channelRef = useRef(null)
 
   useEffect(() => {
@@ -22,12 +20,7 @@ export default function HomePage() {
       const hydrated = await hydrateUserFromSupabase()
       const finalUser = hydrated || u
       setUser(finalUser)
-      if (!finalUser.isGuest) {
-        await loadLiveCircle(finalUser)
-        subscribeToCircleUpdates(finalUser)
-      } else {
-        setLiveCircle(MOCK_CIRCLE.slice(0, 3))
-      }
+      if (!finalUser.isGuest) subscribeToSelf(finalUser)
     }
     load()
     const update = () => setTime(new Date().toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' }))
@@ -39,27 +32,21 @@ export default function HomePage() {
     }
   }, [])
 
-  const loadLiveCircle = async (u) => {
-    const circle = u.circle || []
-    if (!circle.length) { setLiveCircle([]); return [] }
-    const codes = circle.map(m => m.inviteCode).filter(Boolean)
-    const { data } = await supabase.from('users').select('invite_code, status, custom_status_text, display_name, disappear_mode').in('invite_code', codes)
-    if (!data) { setLiveCircle(circle); return circle }
-    const updated = circle.map(member => {
-      const live = data.find(d => d.invite_code === member.inviteCode)
-      if (!live) return member
-      return { ...member, status: live.disappear_mode ? null : (live.status || null), customStatusText: live.disappear_mode ? null : (live.custom_status_text || null), displayName: live.display_name || member.displayName }
-    })
-    setLiveCircle(updated)
-    return updated
-  }
-
-  const subscribeToCircleUpdates = (u) => {
+  const subscribeToSelf = (u) => {
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
-    const channel = supabase.channel('home_circle_' + u.inviteCode)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, (payload) => {
-        const updated = payload.new
-        setLiveCircle(prev => prev.map(m => m.inviteCode === updated.invite_code ? { ...m, status: updated.disappear_mode ? null : (updated.status || null), customStatusText: updated.disappear_mode ? null : (updated.custom_status_text || null), displayName: updated.display_name || m.displayName } : m))
+    const channel = supabase.channel('home_self_' + u.inviteCode)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'users',
+        filter: 'invite_code=eq.' + u.inviteCode,
+      }, (payload) => {
+        const remote = payload.new
+        setUser(prev => ({
+          ...prev,
+          currentStatus: remote.status || null,
+          customStatusText: remote.custom_status_text || null,
+          disappearMode: remote.disappear_mode || false,
+          displayName: remote.display_name || prev.displayName,
+        }))
       })
       .subscribe()
     channelRef.current = channel
@@ -72,7 +59,6 @@ export default function HomePage() {
   )
 
   const isGuest = user.isGuest
-  const circle = isGuest ? MOCK_CIRCLE.slice(0, 3) : liveCircle
   const currentStatus = STATUSES.find(s => s.id === user.currentStatus)
 
   const greet = () => {
@@ -84,7 +70,7 @@ export default function HomePage() {
   }
 
   return (
-    <div style={{ maxWidth: 520, margin: '0 auto', background: 'var(--bg-primary)', minHeight: '100vh', paddingBottom: 100, transition: 'background 0.3s ease' }}>
+    <div style={{ maxWidth: 520, margin: '0 auto', background: 'var(--bg-primary)', minHeight: '100vh', paddingBottom: 60, transition: 'background 0.3s ease' }}>
       <Navigation />
       <div style={{ padding: '80px 28px 28px', background: 'var(--hero-bg)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -104,7 +90,7 @@ export default function HomePage() {
         {user.disappearMode && (
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', background: 'var(--bg-muted)', borderRadius: 999, marginTop: 12 }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--text-muted)' }} />
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>invisible mode on</span>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>invisible mode on · showing as "Disappeared" to your circle</span>
           </div>
         )}
       </div>
@@ -112,7 +98,19 @@ export default function HomePage() {
       <div style={{ padding: '0 28px' }}>
         <section style={{ marginBottom: 16 }}>
           <div style={{ padding: '22px', background: currentStatus ? currentStatus.bg : user.customStatusText ? '#f5f0eb' : 'var(--bg-card)', borderRadius: 20, boxShadow: 'var(--shadow)' }}>
-            {user.currentStatus || user.customStatusText ? (
+            {user.disappearMode ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>your status</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ width: 11, height: 11, borderRadius: '50%', background: '#b0a99a', flexShrink: 0 }} />
+                    <span style={{ fontSize: 17, color: '#b0a99a' }}>Disappeared</span>
+                  </div>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, marginLeft: 21 }}>visible to your circle</p>
+                </div>
+                <Link href="/status" style={{ padding: '8px 16px', background: 'rgba(255,255,255,0.65)', border: '1px solid rgba(0,0,0,0.07)', borderRadius: 999, textDecoration: 'none', fontSize: 13, color: '#6b6b6e' }}>change</Link>
+              </div>
+            ) : user.currentStatus || user.customStatusText ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
                   <p style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>your status</p>
@@ -160,38 +158,30 @@ export default function HomePage() {
                 <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>Your trusted people</p>
               </div>
             </Link>
-          </div>
-        </section>
-
-        <section style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>your circle</p>
-            <Link href="/circle" style={{ fontSize: 13, color: 'var(--text-secondary)', textDecoration: 'none' }}>manage →</Link>
-          </div>
-          {isGuest ? (
-            <>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                {circle.map(m => <CircleMember key={m.id} member={m} isPreview={true} />)}
+            <Link href="/chat" style={{ textDecoration: 'none' }}>
+              <div style={{ padding: '20px', background: 'var(--bg-card)', borderRadius: 18, boxShadow: 'var(--shadow)', height: '100%', transition: 'background 0.3s ease' }}>
+                <div style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--bg-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, fontSize: 18 }}>◉</div>
+                <p style={{ fontSize: 15, color: 'var(--text-primary)', fontWeight: 500, marginBottom: 4 }}>Chat</p>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>Quiet encrypted messages</p>
               </div>
-              <GuestBanner />
-            </>
-          ) : circle.length === 0 ? (
-            <div style={{ padding: '28px 24px', textAlign: 'center', background: 'var(--bg-card)', borderRadius: 18, boxShadow: 'var(--shadow)' }}>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 14 }}>
-                {[...Array(5)].map((_, i) => <div key={i} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bg-muted)', border: '2px dashed var(--text-faint)', animation: 'breathe ' + (2 + i * 0.3) + 's ease-in-out infinite', animationDelay: i * 0.2 + 's' }} />)}
+            </Link>
+            <Link href="/status" style={{ textDecoration: 'none' }}>
+              <div style={{ padding: '20px', background: 'var(--bg-card)', borderRadius: 18, boxShadow: 'var(--shadow)', height: '100%', transition: 'background 0.3s ease' }}>
+                <div style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--bg-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, fontSize: 18 }}>○</div>
+                <p style={{ fontSize: 15, color: 'var(--text-primary)', fontWeight: 500, marginBottom: 4 }}>Status</p>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>Share how you feel</p>
               </div>
-              <p style={{ fontSize: 16, color: 'var(--text-secondary)', marginBottom: 6 }}>Your circle is empty</p>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 18 }}>Invite someone you trust</p>
-              <Link href="/circle" style={{ padding: '10px 24px', border: '1px solid var(--border-soft)', borderRadius: 999, textDecoration: 'none', fontSize: 14, color: 'var(--text-secondary)' }}>invite someone</Link>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {circle.map(m => <CircleMember key={m.id} member={m} />)}
-            </div>
-          )}
+            </Link>
+          </div>
         </section>
 
         <GentleReminder />
+
+        {isGuest && (
+          <div style={{ marginTop: 16 }}>
+            <GuestBanner />
+          </div>
+        )}
       </div>
     </div>
   )

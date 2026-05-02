@@ -45,6 +45,58 @@ function shouldShowTime(messages, index) {
   return (new Date(messages[index + 1].created_at) - new Date(messages[index].created_at)) > 600000
 }
 
+function formatDuration(seconds) {
+  if (!seconds) return '0:00'
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return m + ':' + String(s).padStart(2, '0')
+}
+
+function AudioPlayer({ url, isMe }) {
+  const [playing, setPlaying] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const audioRef = useRef(null)
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    const onEnded = () => { setPlaying(false); setProgress(0) }
+    const onTimeUpdate = () => setProgress(audio.currentTime / audio.duration || 0)
+    const onLoaded = () => setDuration(Math.round(audio.duration))
+    audio.addEventListener('ended', onEnded)
+    audio.addEventListener('timeupdate', onTimeUpdate)
+    audio.addEventListener('loadedmetadata', onLoaded)
+    return () => {
+      audio.removeEventListener('ended', onEnded)
+      audio.removeEventListener('timeupdate', onTimeUpdate)
+      audio.removeEventListener('loadedmetadata', onLoaded)
+    }
+  }, [])
+
+  const toggle = () => {
+    const audio = audioRef.current
+    if (!audio) return
+    if (playing) { audio.pause(); setPlaying(false) }
+    else { audio.play(); setPlaying(true) }
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: isMe ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.04)', borderRadius: 12, minWidth: 180 }}>
+      <audio ref={audioRef} src={url} preload="metadata" />
+      <button onClick={toggle} style={{ width: 32, height: 32, borderRadius: '50%', background: isMe ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.08)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 14 }}>
+        {playing ? '⏸' : '▶'}
+      </button>
+      <div style={{ flex: 1 }}>
+        <div style={{ height: 3, background: isMe ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)', borderRadius: 2, overflow: 'hidden', marginBottom: 4 }}>
+          <div style={{ height: '100%', width: (progress * 100) + '%', background: isMe ? '#ffffff' : '#8a9e8c', borderRadius: 2, transition: 'width 0.1s linear' }} />
+        </div>
+        <p style={{ fontSize: 10, color: isMe ? 'rgba(255,255,255,0.6)' : '#b0a99a' }}>{formatDuration(duration)}</p>
+      </div>
+    </div>
+  )
+}
+
 export default function ChatPage() {
   const [user, setUser] = useState(null)
   const [circle, setCircle] = useState([])
@@ -56,9 +108,16 @@ export default function ChatPage() {
   const [theirToggles, setTheirToggles] = useState({})
   const [slowSend, setSlowSend] = useState(false)
   const [slowHours, setSlowHours] = useState('')
+  const [recording, setRecording] = useState(false)
+  const [recordingSeconds, setRecordingSeconds] = useState(0)
+  const [audioBlob, setAudioBlob] = useState(null)
+  const [uploadError, setUploadError] = useState(null)
   const bottomRef = useRef(null)
   const channelRef = useRef(null)
   const scheduledTimerRef = useRef(null)
+  const mediaRecorderRef = useRef(null)
+  const recordingTimerRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
     const load = async () => {
@@ -75,7 +134,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!selectedMember || !user) return
-    scheduledTimerRef.current = setInterval(() => { loadMessages(true) }, 30000)
+    scheduledTimerRef.current = setInterval(() => loadMessages(true), 30000)
     return () => clearInterval(scheduledTimerRef.current)
   }, [selectedMember, user])
 
@@ -140,29 +199,96 @@ export default function ChatPage() {
   const sendMessage = async () => {
     const text = newMessage.trim()
     if (!text || !user || !selectedMember || sending) return
-    if (slowSend) {
-      const hours = parseFloat(slowHours)
-      if (!slowHours || isNaN(hours) || hours <= 0) return
-    }
+    if (slowSend && (!slowHours || isNaN(parseFloat(slowHours)) || parseFloat(slowHours) <= 0)) return
     setSending(true)
     setNewMessage('')
     let scheduledAt = null
-    let isScheduled = false
-    if (slowSend) {
-      isScheduled = true
-      const hours = parseFloat(slowHours)
-      scheduledAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString()
-    }
+    if (slowSend) scheduledAt = new Date(Date.now() + parseFloat(slowHours) * 3600000).toISOString()
     const { error } = await supabase.from('messages').insert({
       chat_id: getChatId(user.inviteCode, selectedMember.inviteCode),
       sender_code: user.inviteCode,
       content: text,
       created_at: new Date().toISOString(),
-      is_scheduled: isScheduled,
+      message_type: 'text',
+      is_scheduled: !!scheduledAt,
       scheduled_at: scheduledAt,
     })
     if (error) setNewMessage(text)
     else await loadMessages()
+    setSending(false)
+  }
+
+  const uploadFile = async (file) => {
+    setUploadError(null)
+    if (file.size > 2 * 1024 * 1024) { setUploadError('File too large. Max 2 MB.'); return }
+    setSending(true)
+    const ext = file.name.split('.').pop()
+    const path = user.inviteCode + '/' + Date.now() + '.' + ext
+    const { data, error } = await supabase.storage.from('chat-attachments').upload(path, file, { upsert: true })
+    if (error) { setUploadError('Upload failed. Try again.'); setSending(false); return }
+    const { data: urlData } = supabase.storage.from('chat-attachments').getPublicUrl(path)
+    await supabase.from('messages').insert({
+      chat_id: getChatId(user.inviteCode, selectedMember.inviteCode),
+      sender_code: user.inviteCode,
+      content: file.name,
+      created_at: new Date().toISOString(),
+      message_type: file.type.startsWith('image/') ? 'image' : 'file',
+      file_url: urlData.publicUrl,
+      file_name: file.name,
+      file_size: file.size,
+      is_scheduled: false,
+      scheduled_at: null,
+    })
+    await loadMessages()
+    setSending(false)
+  }
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mediaRecorder = new MediaRecorder(stream)
+      const chunks = []
+      mediaRecorder.ondataavailable = e => chunks.push(e.data)
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' })
+        setAudioBlob(blob)
+        stream.getTracks().forEach(t => t.stop())
+      }
+      mediaRecorder.start()
+      mediaRecorderRef.current = mediaRecorder
+      setRecording(true)
+      setRecordingSeconds(0)
+      recordingTimerRef.current = setInterval(() => setRecordingSeconds(s => s + 1), 1000)
+    } catch { setUploadError('Microphone access denied.') }
+  }
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current) mediaRecorderRef.current.stop()
+    clearInterval(recordingTimerRef.current)
+    setRecording(false)
+  }
+
+  const sendAudio = async () => {
+    if (!audioBlob) return
+    setSending(true)
+    const path = user.inviteCode + '/voice_' + Date.now() + '.webm'
+    const { error } = await supabase.storage.from('chat-attachments').upload(path, audioBlob, { upsert: true })
+    if (error) { setUploadError('Failed to send voice message.'); setSending(false); return }
+    const { data: urlData } = supabase.storage.from('chat-attachments').getPublicUrl(path)
+    await supabase.from('messages').insert({
+      chat_id: getChatId(user.inviteCode, selectedMember.inviteCode),
+      sender_code: user.inviteCode,
+      content: 'Voice message',
+      created_at: new Date().toISOString(),
+      message_type: 'audio',
+      file_url: urlData.publicUrl,
+      duration: recordingSeconds,
+      is_scheduled: false,
+      scheduled_at: null,
+    })
+    setAudioBlob(null)
+    setRecordingSeconds(0)
+    await loadMessages()
     setSending(false)
   }
 
@@ -231,7 +357,7 @@ export default function ChatPage() {
         ) : (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <button onClick={() => { setSelectedMember(null); setMessages([]); setSlowSend(false); setSlowHours('') }} className="card" style={{ background: 'none', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>←</button>
+              <button onClick={() => { setSelectedMember(null); setMessages([]); setSlowSend(false); setSlowHours(''); setAudioBlob(null) }} className="card" style={{ background: 'none', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>←</button>
               <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#f0ede8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 500, color: '#8a8a8e', flexShrink: 0 }}>
                 {selectedMember.initials || '?'}
               </div>
@@ -259,6 +385,12 @@ export default function ChatPage() {
               </div>
             )}
 
+            {uploadError && (
+              <div style={{ padding: '10px 14px', background: '#fdf0ef', borderRadius: 10, marginBottom: 12, borderLeft: '3px solid #c0392b' }}>
+                <p style={{ fontSize: 13, color: '#c0392b' }}>{uploadError}</p>
+              </div>
+            )}
+
             <div style={{ minHeight: 320, maxHeight: 420, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12, padding: '4px 0' }}>
               {messages.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '40px 20px' }}>
@@ -276,23 +408,35 @@ export default function ChatPage() {
                       <div style={{ maxWidth: '75%', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', gap: 4 }}>
                         {isPending && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                            <span style={{ fontSize: 10, color: '#a09080', background: '#f5f0eb', padding: '2px 8px', borderRadius: 999, letterSpacing: '0.04em' }}>
-                              ⏱ {formatScheduledTime(msg.scheduled_at)}
-                            </span>
+                            <span style={{ fontSize: 10, color: '#a09080', background: '#f5f0eb', padding: '2px 8px', borderRadius: 999 }}>⏱ {formatScheduledTime(msg.scheduled_at)}</span>
                             <button onClick={() => cancelScheduled(msg.id)} style={{ fontSize: 10, color: '#c0392b', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>cancel</button>
                           </div>
                         )}
                         <div className={isMe ? '' : 'msg-bubble-them'} style={{
-                          padding: '10px 14px',
+                          padding: msg.message_type === 'audio' ? '8px 10px' : msg.message_type === 'image' ? '4px' : '10px 14px',
                           background: isPending ? '#f5f0eb' : isMe ? '#2c2c2e' : '#ffffff',
                           color: isPending ? '#a09080' : isMe ? '#faf9f7' : '#2c2c2e',
                           borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
                           fontSize: 15, lineHeight: 1.5,
                           boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
                           opacity: isPending ? 0.8 : 1,
-                          borderLeft: isPending ? '3px solid #d4b89a' : 'none',
+                          overflow: 'hidden',
                         }}>
-                          {msg.content}
+                          {msg.message_type === 'audio' ? (
+                            <AudioPlayer url={msg.file_url} isMe={isMe} />
+                          ) : msg.message_type === 'image' ? (
+                            <img src={msg.file_url} alt={msg.file_name} style={{ maxWidth: 220, maxHeight: 220, borderRadius: 14, display: 'block', cursor: 'pointer' }} onClick={() => window.open(msg.file_url, '_blank')} />
+                          ) : msg.message_type === 'file' ? (
+                            <a href={msg.file_url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: isMe ? '#faf9f7' : '#2c2c2e' }}>
+                              <span style={{ fontSize: 20 }}>📎</span>
+                              <div>
+                                <p style={{ fontSize: 13, fontWeight: 500 }}>{msg.file_name}</p>
+                                <p style={{ fontSize: 10, opacity: 0.6 }}>{msg.file_size ? (msg.file_size / 1024).toFixed(1) + ' KB' : ''}</p>
+                              </div>
+                            </a>
+                          ) : (
+                            msg.content
+                          )}
                         </div>
                       </div>
                     </div>
@@ -323,18 +467,11 @@ export default function ChatPage() {
                       <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'white', position: 'absolute', top: 3, left: slowSend ? 23 : 3, transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
                     </button>
                   </div>
-
                   {slowSend && (
                     <div style={{ marginTop: 12 }}>
                       <p className="text-s" style={{ fontSize: 12, marginBottom: 8 }}>Deliver after how many hours?</p>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <input
-                          type="number"
-                          min="0.5"
-                          step="0.5"
-                          value={slowHours}
-                          onChange={e => setSlowHours(e.target.value)}
-                          placeholder="e.g. 3.5"
+                        <input type="number" min="0.5" step="0.5" value={slowHours} onChange={e => setSlowHours(e.target.value)} placeholder="e.g. 3.5"
                           className="input-field"
                           style={{ flex: 1, padding: '9px 14px', border: '1.5px solid transparent', borderRadius: 10, fontSize: 15, outline: 'none', fontFamily: 'var(--font-sans)', transition: 'border-color 0.2s ease' }}
                           onFocus={e => e.target.style.borderColor = '#8a9e8c'}
@@ -353,22 +490,60 @@ export default function ChatPage() {
                   )}
                 </div>
 
-                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                  <textarea value={newMessage} onChange={e => setNewMessage(e.target.value)}
-                    placeholder={slowSend ? 'Write something to send later...' : 'Say something gently...'}
-                    rows={2}
-                    className="input-field"
-                    style={{ flex: 1, padding: '12px 16px', border: slowSend ? '1.5px solid #d4b89a' : '1.5px solid transparent', borderRadius: 14, fontSize: 15, resize: 'none', outline: 'none', fontFamily: 'var(--font-sans)', lineHeight: 1.5, transition: 'border-color 0.2s ease' }}
-                    onFocus={e => { if (!slowSend) e.target.style.borderColor = '#8a9e8c' }}
-                    onBlur={e => { if (!slowSend) e.target.style.borderColor = 'transparent' }}
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!sending) sendMessage() } }}
-                  />
-                  <button onClick={sendMessage}
-                    disabled={!newMessage.trim() || sending || (slowSend && !slowHoursValid)}
-                    style={{ padding: '12px 16px', background: (slowSend && !slowHoursValid) ? '#f0ede8' : slowSend ? '#a09080' : newMessage.trim() ? '#2c2c2e' : '#f0ede8', color: (newMessage.trim() && (!slowSend || slowHoursValid)) ? '#faf9f7' : '#b0a99a', border: 'none', borderRadius: 14, fontSize: 20, cursor: (newMessage.trim() && (!slowSend || slowHoursValid)) ? 'pointer' : 'default', transition: 'all 0.2s ease', flexShrink: 0 }}>
-                    {slowSend ? '⏱' : '↑'}
-                  </button>
-                </div>
+                {/* Audio preview */}
+                {audioBlob && (
+                  <div className="card" style={{ padding: '12px 14px', borderRadius: 12, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 18 }}>🎙</span>
+                    <div style={{ flex: 1 }}>
+                      <p className="text-p" style={{ fontSize: 13, fontWeight: 500 }}>Voice message ready</p>
+                      <p className="text-m" style={{ fontSize: 11 }}>{formatDuration(recordingSeconds)}</p>
+                    </div>
+                    <button onClick={sendAudio} disabled={sending} style={{ padding: '7px 14px', background: '#8a9e8c', color: '#ffffff', border: 'none', borderRadius: 999, fontSize: 12, cursor: 'pointer' }}>send</button>
+                    <button onClick={() => { setAudioBlob(null); setRecordingSeconds(0) }} style={{ padding: '7px 14px', background: 'none', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 999, fontSize: 12, cursor: 'pointer' }} className="text-s">discard</button>
+                  </div>
+                )}
+
+                {/* Recording indicator */}
+                {recording && (
+                  <div style={{ padding: '10px 14px', background: '#fdf0ef', borderRadius: 12, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#c0392b', animation: 'breathe 1s ease-in-out infinite', display: 'inline-block' }} />
+                    <p style={{ fontSize: 13, color: '#c0392b', flex: 1 }}>Recording... {formatDuration(recordingSeconds)}</p>
+                    <button onClick={stopRecording} style={{ padding: '6px 12px', background: '#c0392b', color: '#ffffff', border: 'none', borderRadius: 999, fontSize: 12, cursor: 'pointer' }}>stop</button>
+                  </div>
+                )}
+
+                {/* Input row */}
+                {!audioBlob && !recording && (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                    {/* Attachment */}
+                    <input ref={fileInputRef} type="file" accept="*/*" style={{ display: 'none' }} onChange={e => { if (e.target.files[0]) uploadFile(e.target.files[0]); e.target.value = '' }} />
+                    <button onClick={() => fileInputRef.current?.click()} title="Attach file (max 2MB)" style={{ width: 40, height: 40, borderRadius: 12, background: 'none', border: '1.5px solid rgba(0,0,0,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, transition: 'all 0.2s ease' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    >📎</button>
+
+                    {/* Voice */}
+                    <button onClick={startRecording} title="Record voice message" style={{ width: 40, height: 40, borderRadius: 12, background: 'none', border: '1.5px solid rgba(0,0,0,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, transition: 'all 0.2s ease' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    >🎙</button>
+
+                    <textarea value={newMessage} onChange={e => setNewMessage(e.target.value)}
+                      placeholder={slowSend ? 'Write something to send later...' : 'Say something gently...'}
+                      rows={2}
+                      className="input-field"
+                      style={{ flex: 1, padding: '12px 16px', border: slowSend ? '1.5px solid #d4b89a' : '1.5px solid transparent', borderRadius: 14, fontSize: 15, resize: 'none', outline: 'none', fontFamily: 'var(--font-sans)', lineHeight: 1.5, transition: 'border-color 0.2s ease' }}
+                      onFocus={e => { if (!slowSend) e.target.style.borderColor = '#8a9e8c' }}
+                      onBlur={e => { if (!slowSend) e.target.style.borderColor = 'transparent' }}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!sending) sendMessage() } }}
+                    />
+                    <button onClick={sendMessage}
+                      disabled={!newMessage.trim() || sending || (slowSend && !slowHoursValid)}
+                      style={{ padding: '12px 16px', background: (slowSend && !slowHoursValid) ? '#f0ede8' : slowSend ? '#a09080' : newMessage.trim() ? '#2c2c2e' : '#f0ede8', color: (newMessage.trim() && (!slowSend || slowHoursValid)) ? '#faf9f7' : '#b0a99a', border: 'none', borderRadius: 14, fontSize: 20, cursor: (newMessage.trim() && (!slowSend || slowHoursValid)) ? 'pointer' : 'default', transition: 'all 0.2s ease', flexShrink: 0 }}>
+                      {slowSend ? '⏱' : '↑'}
+                    </button>
+                  </div>
+                )}
                 <p className="text-f" style={{ fontSize: 11, textAlign: 'center', marginTop: 8 }}>
                   {slowSend && slowHoursValid ? 'Scheduled · recipient sees it after ' + parseFloat(slowHours) + ' hour' + (parseFloat(slowHours) !== 1 ? 's' : '') : slowSend ? 'Enter hours above then write your message' : 'Enter to send · Shift+Enter for new line'}
                 </p>

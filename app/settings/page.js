@@ -48,8 +48,13 @@ export default function SettingsPage() {
       client_id: clientId,
       callback: async (response) => {
         try {
-          const base64 = response.credential.split('.')[1]
-          const decoded = JSON.parse(atob(base64))
+          const res = await fetch('/api/auth/google', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ credential: response.credential })
+})
+const decoded = await res.json()
+if (decoded.error) { setError('Authentication failed.'); return }
           const restored = await restoreFromSupabaseByEmail(decoded.email)
           if (restored) {
             const withGoogle = { ...restored, googleLinked: true, avatar: decoded.picture }
@@ -217,21 +222,22 @@ export default function SettingsPage() {
       )}
 
       {/* Appearance */}
-      <section style={{ marginBottom: 20 }}>
-        <p style={{ fontSize: 11, color: '#a0a0a3', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14 }}>Appearance</p>
-        <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: '6px 18px', boxShadow: 'var(--shadow)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px 0' }}>
-            <div style={{ flex: 1, paddingRight: 16 }}>
-              <p style={{ fontSize: 14, color: 'var(--text-primary)', marginBottom: 2 }}>Dark Mode</p>
-              <p style={{ fontSize: 12, color: '#a0a0a3', lineHeight: 1.5 }}>Easier on the eyes at night.</p>
-            </div>
-            <button onClick={toggleDark} style={{ width: 44, height: 24, borderRadius: 999, background: dark ? '#8a9e8c' : 'rgba(0,0,0,0.1)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s ease', flexShrink: 0 }}>
-              <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'white', position: 'absolute', top: 3, left: dark ? 23 : 3, transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
-            </button>
-          </div>
-        </div>
-      </section>
-
+      
+      {/* Dark Mode */}
+<section style={{ marginBottom: 20 }}>
+  <p style={{ fontSize: 11, color: '#a0a0a3', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14 }}>Appearance</p>
+  <div style={{ background: 'var(--bg-card, #ffffff)', borderRadius: 16, padding: '6px 18px', boxShadow: '0 2px 20px rgba(0,0,0,0.06)' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px 0' }}>
+      <div style={{ flex: 1, paddingRight: 16 }}>
+        <p style={{ fontSize: 14, color: 'var(--text-primary, #2c2c2e)', marginBottom: 2 }}>Dark Mode</p>
+        <p style={{ fontSize: 12, color: '#a0a0a3', lineHeight: 1.5 }}>Easier on the eyes at night.</p>
+      </div>
+      <button onClick={toggleDark} style={{ width: 44, height: 24, borderRadius: 999, background: dark ? '#8a9e8c' : 'rgba(0,0,0,0.1)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s ease', flexShrink: 0 }}>
+        <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'white', position: 'absolute', top: 3, left: dark ? 23 : 3, transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
+      </button>
+    </div>
+  </div>
+</section>
       {/* Presence */}
       <section style={{ marginBottom: 28 }}>
         <p style={{ fontSize: 11, color: '#a0a0a3', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14 }}>Presence</p>
