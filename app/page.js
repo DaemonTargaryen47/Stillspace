@@ -40,7 +40,7 @@ export default function GuestPage() {
             Stillspace
           </h1>
           <p style={{ fontSize: 17, color: '#8a8a8e', lineHeight: 1.8, maxWidth: 300, margin: '0 auto 32px', animationDelay: '0.2s' }} className="fade-up">
-            Where the noise ends and the echoes begin..
+            Keep in touch with your closest people, without the stress..
           </p>
 
           <div style={{ animationDelay: '0.3s', marginBottom: 28 }} className="fade-up">
