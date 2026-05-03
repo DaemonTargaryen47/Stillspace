@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { initUser, setStatus as saveStatus, hydrateUserFromSupabase, updateUser, pushToSupabase } from '../../lib/store'
 import { STATUSES } from '../../lib/constants'
 import Navigation from '../../components/Navigation'
+import { sanitizeStatus } from '../../lib/sanitize'
 
 export default function StatusPage() {
   const [user, setUser] = useState(null)
@@ -44,10 +45,12 @@ export default function StatusPage() {
   }
 
   const handleSaveCustom = async () => {
-    if (!customText.trim()) return
-    const updated = updateUser({ customStatusText: customText.trim(), currentStatus: null })
-    await pushToSupabase({ ...updated, customStatusText: customText.trim(), currentStatus: null })
+    const clean = sanitizeStatus(customText)
+    if (!clean) return
+    const updated = updateUser({ customStatusText: clean, currentStatus: null })
+    await pushToSupabase({ ...updated, customStatusText: clean, currentStatus: null })
     setUser(updated)
+    setCustomText(clean)
     setSelected(null)
     setCustomSaved(true)
     setChanging(false)
@@ -105,7 +108,15 @@ export default function StatusPage() {
                 {STATUSES.map(status => (
                   <button key={status.id} onClick={() => setSelected(status.id)}
                     className="card"
-                    style={{ padding: '14px 18px', background: selected === status.id ? status.bg : undefined, border: selected === status.id ? '1.5px solid ' + status.color + '44' : '1px solid rgba(0,0,0,0.06)', borderRadius: 16, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12, transition: 'all 0.25s ease', transform: selected === status.id ? 'scale(1.01)' : 'scale(1)' }}
+                    style={{
+                      padding: '14px 18px',
+                      background: selected === status.id ? status.bg : undefined,
+                      border: selected === status.id ? '1.5px solid ' + status.color + '44' : '1px solid rgba(0,0,0,0.06)',
+                      borderRadius: 16, cursor: 'pointer', textAlign: 'left',
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      transition: 'all 0.25s ease',
+                      transform: selected === status.id ? 'scale(1.01)' : 'scale(1)',
+                    }}
                   >
                     <span style={{ width: 10, height: 10, borderRadius: '50%', background: status.color, flexShrink: 0, boxShadow: selected === status.id ? '0 0 0 3px ' + status.color + '22' : 'none' }} />
                     <span style={{ fontSize: 15, color: selected === status.id ? status.color : undefined }} className={selected === status.id ? '' : 'text-s'}>{status.label}</span>
@@ -126,7 +137,11 @@ export default function StatusPage() {
             <div>
               <p className="text-s" style={{ fontSize: 14, marginBottom: 12, lineHeight: 1.6 }}>Write how you feel in your own words. Max 50 characters.</p>
               <div style={{ position: 'relative', marginBottom: 8 }}>
-                <textarea value={customText} onChange={e => { if (e.target.value.length <= 50) setCustomText(e.target.value) }} placeholder="I feel like a quiet evening..." rows={3}
+                <textarea
+                  value={customText}
+                  onChange={e => { if (e.target.value.length <= 50) setCustomText(e.target.value) }}
+                  placeholder="I feel like a quiet evening..."
+                  rows={3}
                   className="input-field"
                   style={{ width: '100%', padding: '14px 18px', border: '1.5px solid transparent', borderRadius: 16, fontSize: 15, resize: 'none', outline: 'none', fontFamily: 'var(--font-sans)', lineHeight: 1.6, transition: 'border-color 0.2s ease' }}
                   onFocus={e => e.target.style.borderColor = '#8a9e8c'}

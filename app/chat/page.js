@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase'
 import Navigation from '../../components/Navigation'
 import Link from 'next/link'
 import { STATUSES } from '../../lib/constants'
+import { sanitizeMessage } from '../../lib/sanitize'
 
 function formatTime(timestamp) {
   if (!timestamp) return ''
@@ -197,7 +198,7 @@ export default function ChatPage() {
   }
 
   const sendMessage = async () => {
-    const text = newMessage.trim()
+    const text = sanitizeMessage(newMessage.trim())
     if (!text || !user || !selectedMember || sending) return
     if (slowSend && (!slowHours || isNaN(parseFloat(slowHours)) || parseFloat(slowHours) <= 0)) return
     setSending(true)
@@ -453,7 +454,6 @@ export default function ChatPage() {
 
             {myOn && (
               <>
-                {/* Slow send */}
                 <div className="card-muted" style={{ padding: '12px 14px', borderRadius: 12, marginBottom: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -490,7 +490,6 @@ export default function ChatPage() {
                   )}
                 </div>
 
-                {/* Audio preview */}
                 {audioBlob && (
                   <div className="card" style={{ padding: '12px 14px', borderRadius: 12, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ fontSize: 18 }}>🎙</span>
@@ -503,7 +502,6 @@ export default function ChatPage() {
                   </div>
                 )}
 
-                {/* Recording indicator */}
                 {recording && (
                   <div style={{ padding: '10px 14px', background: '#fdf0ef', borderRadius: 12, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#c0392b', animation: 'breathe 1s ease-in-out infinite', display: 'inline-block' }} />
@@ -512,22 +510,19 @@ export default function ChatPage() {
                   </div>
                 )}
 
-                {/* Input row */}
                 {!audioBlob && !recording && (
                   <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                    {/* Attachment */}
                     <input ref={fileInputRef} type="file" accept="*/*" style={{ display: 'none' }} onChange={e => { if (e.target.files[0]) uploadFile(e.target.files[0]); e.target.value = '' }} />
-                    <button onClick={() => fileInputRef.current?.click()} title="Attach file (max 2MB)" style={{ width: 40, height: 40, borderRadius: 12, background: 'none', border: '1.5px solid rgba(0,0,0,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, transition: 'all 0.2s ease' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    <button onClick={() => fileInputRef.current?.click()} title="Attach file (max 2MB)"
+                      style={{ width: 40, height: 40, borderRadius: 12, background: 'none', border: '1.5px solid rgba(0,0,0,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, transition: 'all 0.2s ease' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
                     >📎</button>
-
-                    {/* Voice */}
-                    <button onClick={startRecording} title="Record voice message" style={{ width: 40, height: 40, borderRadius: 12, background: 'none', border: '1.5px solid rgba(0,0,0,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, transition: 'all 0.2s ease' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    <button onClick={startRecording} title="Record voice message"
+                      style={{ width: 40, height: 40, borderRadius: 12, background: 'none', border: '1.5px solid rgba(0,0,0,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, transition: 'all 0.2s ease' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
                     >🎙</button>
-
                     <textarea value={newMessage} onChange={e => setNewMessage(e.target.value)}
                       placeholder={slowSend ? 'Write something to send later...' : 'Say something gently...'}
                       rows={2}
