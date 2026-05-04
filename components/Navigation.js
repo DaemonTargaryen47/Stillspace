@@ -10,12 +10,20 @@ export default function Navigation() {
   const isRoot = path === '/'
   const [user, setUser] = useState(null)
   const { dark } = useDarkMode()
+  const [isDesktop, setIsDesktop] = useState(false)
 
   useEffect(() => {
     const loadUser = () => setUser(storage.get('user'))
     loadUser()
     const interval = setInterval(loadUser, 1000)
     return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    const check = () => setIsDesktop(window.innerWidth >= 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
   }, [])
 
   const SHORTCUTS = [
@@ -44,6 +52,8 @@ export default function Navigation() {
   const activeColor = dark ? '#e8e6e3' : '#faf9f7'
   const activeBg = dark ? '#3a3a3c' : '#2c2c2e'
   const hoverBg = dark ? 'rgba(255,255,255,0.06)' : '#f0ede8'
+
+  if (isDesktop) return null
 
   return (
     <div style={{

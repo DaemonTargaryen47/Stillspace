@@ -1,6 +1,7 @@
 import { DM_Serif_Display, DM_Sans } from 'next/font/google'
 import './globals.css'
 import { DarkModeProvider } from '../lib/darkMode'
+import AppLayout from '../components/AppLayout'
 
 const serif = DM_Serif_Display({
   subsets: ['latin'],
@@ -24,7 +25,9 @@ export default function RootLayout({ children }) {
     <html lang="en" className={`${serif.variable} ${sans.variable}`}>
       <body style={{ fontFamily: 'var(--font-sans)' }} suppressHydrationWarning>
         <DarkModeProvider>
-          {children}
+          <AppLayout>
+            {children}
+          </AppLayout>
         </DarkModeProvider>
       </body>
     </html>
