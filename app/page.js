@@ -272,7 +272,7 @@ function TheDistance() {
   )
 }
 
-function LandingTopBar() {
+function TopBar({ isMobile }) {
   const [user, setUser] = useState(null)
 
   useEffect(() => {
@@ -288,46 +288,64 @@ function LandingTopBar() {
     ? user.email.slice(0, 2).toUpperCase()
     : null
 
+  const barBg = isMobile
+    ? 'rgba(250,249,247,0.95)'
+    : 'rgba(26,26,28,0.96)'
+  const borderCol = isMobile
+    ? 'rgba(0,0,0,0.06)'
+    : 'rgba(255,255,255,0.06)'
+  const logoColor = isMobile ? '#2c2c2e' : '#f0ede8'
+  const avatarBorder = isMobile
+    ? 'rgba(0,0,0,0.1)'
+    : 'rgba(255,255,255,0.12)'
+  const avatarBorderHover = isMobile
+    ? 'rgba(0,0,0,0.25)'
+    : 'rgba(255,255,255,0.3)'
+  const guestBg = isMobile ? '#f0ede8' : '#3a3a3c'
+  const guestColor = isMobile ? '#b0a99a' : '#787570'
+  const signedInBg = isMobile ? '#e8f0ea' : '#2a4a2c'
+  const signedInColor = isMobile ? '#6b8a6e' : '#7aae7c'
+
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 200,
       height: 56,
-      background: 'rgba(26,26,28,0.96)',
+      background: barBg,
       backdropFilter: 'blur(20px)',
-      borderBottom: '1px solid rgba(255,255,255,0.06)',
+      borderBottom: '1px solid ' + borderCol,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      position: 'fixed',
-      padding: '0 32px',
     }}>
       {/* Logo — centered */}
       <Link href="/" style={{ textDecoration: 'none' }}>
-        <span style={{ fontFamily: 'var(--font-serif)', fontSize: 20, color: '#f0ede8', letterSpacing: '-0.01em' }}>
+        <span style={{ fontFamily: 'var(--font-serif)', fontSize: 20, color: logoColor, letterSpacing: '-0.01em' }}>
           Stillspace
         </span>
       </Link>
 
       {/* Account — pinned right */}
-      <Link href={user && !user.isGuest ? '/settings' : '/home'} style={{ textDecoration: 'none', position: 'absolute', right: 32 }}>
+      <Link href={user && !user.isGuest ? '/settings' : '/home'} style={{ textDecoration: 'none', position: 'absolute', right: 20 }}>
         {user?.avatar && !user?.isGuest ? (
-          <img src={user.avatar} alt="" style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.15)', display: 'block', transition: 'border-color 0.2s ease' }}
-          onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.35)'}
-          onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'}
+          <img
+            src={user.avatar} alt=""
+            style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', border: '2px solid ' + avatarBorder, display: 'block', transition: 'border-color 0.2s ease' }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = avatarBorderHover}
+            onMouseLeave={e => e.currentTarget.style.borderColor = avatarBorder}
           />
         ) : (
           <div style={{
             width: 34, height: 34, borderRadius: '50%',
-            background: user && !user.isGuest && initials ? '#2a4a2c' : '#3a3a3c',
-            border: '2px solid rgba(255,255,255,0.12)',
+            background: user && !user.isGuest && initials ? signedInBg : guestBg,
+            border: '2px solid ' + avatarBorder,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: user && !user.isGuest && initials ? 12 : 16,
             fontWeight: 500,
-            color: user && !user.isGuest && initials ? '#7aae7c' : '#787570',
+            color: user && !user.isGuest && initials ? signedInColor : guestColor,
             cursor: 'pointer', transition: 'all 0.2s ease',
           }}
-          onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'}
-          onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'}
+          onMouseEnter={e => e.currentTarget.style.borderColor = avatarBorderHover}
+          onMouseLeave={e => e.currentTarget.style.borderColor = avatarBorder}
           >
             {user && !user.isGuest && initials ? initials : '?'}
           </div>
@@ -353,7 +371,11 @@ export default function LandingPage() {
 
   return (
     <>
-      {isDesktop && <LandingTopBar />}
+      {/* Desktop top bar */}
+      {isDesktop && <TopBar isMobile={false} />}
+
+      {/* Mobile top bar */}
+      {!isDesktop && mounted && <TopBar isMobile={true} />}
 
       <div style={{
         minHeight: '100vh',
@@ -361,7 +383,7 @@ export default function LandingPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: isDesktop ? '80px 48px 40px' : '24px 24px 40px',
+        padding: isDesktop ? '80px 48px 40px' : '80px 24px 40px',
         position: 'relative',
         overflow: 'hidden',
       }}>
@@ -419,7 +441,7 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Right column */}
+          {/* Right column — desktop only */}
           <div style={{ flex: 1, minWidth: 0, display: 'none' }} className="landing-right">
             {mounted && <TheDistance />}
           </div>
