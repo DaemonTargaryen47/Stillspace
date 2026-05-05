@@ -31,7 +31,10 @@ export default function CirclePage() {
     }
     load()
     return () => {
-      if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
     }
   }, [])
 
@@ -60,11 +63,16 @@ export default function CirclePage() {
   }
 
   const subscribeToUpdates = (u) => {
-    if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
+    }
     const channel = supabase
       .channel('circle_page_' + u.inviteCode)
       .on('postgres_changes', {
-        event: 'UPDATE', schema: 'public', table: 'users',
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'users',
         filter: 'invite_code=eq.' + u.inviteCode,
       }, async (payload) => {
         const newCircle = payload.new.circle_data ? JSON.parse(payload.new.circle_data) : []
@@ -73,7 +81,9 @@ export default function CirclePage() {
         await loadLiveCircle({ ...u, circle: newCircle })
       })
       .on('postgres_changes', {
-        event: 'UPDATE', schema: 'public', table: 'users',
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'users',
       }, (payload) => {
         const updated = payload.new
         setLiveCircle(prev => prev.map(m => {
@@ -106,7 +116,11 @@ export default function CirclePage() {
     setLoading(true)
     const result = await connectByCode(user, code)
     setLoading(false)
-    if (!result.success) { setJoinStatus('error:' + result.error); setTimeout(() => setJoinStatus(null), 4000); return }
+    if (!result.success) {
+      setJoinStatus('error:' + result.error)
+      setTimeout(() => setJoinStatus(null), 4000)
+      return
+    }
     setUser(result.updatedUser)
     setLiveCircle(prev => [...prev, result.member])
     setJoinCode('')
@@ -228,7 +242,7 @@ export default function CirclePage() {
         ) : circle.length === 0 ? (
           <div className="card" style={{ padding: '40px 24px', textAlign: 'center', borderRadius: 18 }}>
             <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginBottom: 20 }}>
-              {[...Array(3)].map((_, i) => <div key={i} className="dashed-circle" style={{ width: 44, height: 44, borderRadius: '50%', border: '2px dashed #d0cdc8', animation: 'breathe ' + (2.5 + i * 0.4) + 's ease-in-out infinite', animationDelay: i * 0.3 + 's' }} />)}
+              {[...Array(3)].map((_, i) => <div key={i} className="dashed-circle" style={{ width: 44, height: 44, borderRadius: '50%', border: '2px dashed #d0cdc8', animationName: 'breathe', animationDuration: (2.5 + i * 0.4) + 's', animationTimingFunction: 'ease-in-out', animationIterationCount: 'infinite', animationDelay: i * 0.3 + 's' }} />)}
             </div>
             <p className="text-p" style={{ fontFamily: 'var(--font-serif)', fontSize: 20, marginBottom: 8 }}>Your circle is quiet</p>
             <p className="text-m" style={{ fontSize: 14, lineHeight: 1.6 }}>Share your invite code or enter someone else's to begin.</p>

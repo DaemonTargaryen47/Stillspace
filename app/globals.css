@@ -107,3 +107,74 @@ body.dark ::-webkit-scrollbar-thumb { background: #444446; }
     padding-bottom: 40px !important;
   }
 }
+
+/* Breathing canvas */
+@keyframes breatheCanvas {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+.breathing-bg {
+  animation: breatheCanvas 6s ease-in-out infinite;
+  transform-origin: center center;
+}
+
+/* Ink drop transition */
+.ink-enter {
+  animation: inkReveal 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes inkReveal {
+  0% {
+    clip-path: circle(0% at 50% 50%);
+    opacity: 0.6;
+  }
+  100% {
+    clip-path: circle(150% at 50% 50%);
+    opacity: 1;
+  }
+}
+
+/* Micro reward animations */
+@keyframes statusPop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.18); }
+  70% { transform: scale(0.94); }
+  100% { transform: scale(1); }
+}
+
+@keyframes checkFloat {
+  0% { opacity: 0; transform: translateY(0px) scale(0.5); }
+  40% { opacity: 1; transform: translateY(-16px) scale(1.1); }
+  80% { opacity: 0.8; transform: translateY(-28px) scale(1); }
+  100% { opacity: 0; transform: translateY(-40px) scale(0.8); }
+}
+
+@keyframes ripplePop {
+  0% { transform: scale(0); opacity: 0.6; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+@keyframes gentleShake {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(-3deg); }
+  40% { transform: rotate(3deg); }
+  60% { transform: rotate(-2deg); }
+  80% { transform: rotate(2deg); }
+}
+
+@keyframes inkDot {
+  0% { transform: scale(0); opacity: 1; }
+  60% { transform: scale(1); opacity: 0.4; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+
+@keyframes floatCheck {
+  0% { opacity: 0; transform: translate(-50%, 0) scale(0.3); }
+  30% { opacity: 1; transform: translate(-50%, -20px) scale(1.1); }
+  70% { opacity: 0.7; transform: translate(-50%, -36px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -52px) scale(0.8); }
+}
+
+.micro-pop { animation: statusPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+.micro-shake { animation: gentleShake 0.5s ease forwards; }

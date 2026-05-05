@@ -4,6 +4,7 @@ import { initUser, setStatus as saveStatus, hydrateUserFromSupabase, updateUser,
 import { STATUSES } from '../../lib/constants'
 import Navigation from '../../components/Navigation'
 import { sanitizeStatus } from '../../lib/sanitize'
+import { rewardFloat, rewardRipple } from '../../lib/microAnimations'
 
 export default function StatusPage() {
   const [user, setUser] = useState(null)
@@ -42,6 +43,11 @@ export default function StatusPage() {
     setChanging(false)
     setUseCustom(false)
     setTimeout(() => setSaved(false), 2500)
+    const btn = document.querySelector('[data-status-save]')
+    if (btn) {
+      rewardFloat(btn, '◇', '#8a9e8c')
+      rewardRipple(btn, '#8a9e8c')
+    }
   }
 
   const handleSaveCustom = async () => {
@@ -56,6 +62,11 @@ export default function StatusPage() {
     setChanging(false)
     setUseCustom(false)
     setTimeout(() => setCustomSaved(false), 2500)
+    const btn = document.querySelector('[data-custom-status-save]')
+    if (btn) {
+      rewardFloat(btn, '◇', '#8a9e8c')
+      rewardRipple(btn, '#8a9e8c')
+    }
   }
 
   const handleChange = () => { setChanging(true); setSaved(false); setCustomSaved(false) }
@@ -125,8 +136,13 @@ export default function StatusPage() {
                 ))}
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={handleSave} disabled={!selected} style={{ flex: 1, padding: '14px', background: saved ? '#8a9e8c' : selected ? '#2c2c2e' : '#f4f3f0', color: selected ? '#faf9f7' : '#a0a0a3', border: 'none', borderRadius: 999, fontSize: 15, cursor: selected ? 'pointer' : 'default', transition: 'all 0.3s ease' }}>
-                  {saved ? 'status updated' : (user.currentStatus || hasCustom) ? 'update status' : 'share with circle'}
+                <button
+                  data-status-save
+                  onClick={handleSave}
+                  disabled={!selected}
+                  style={{ flex: 1, padding: '14px', background: saved ? '#8a9e8c' : selected ? '#2c2c2e' : '#f4f3f0', color: selected ? '#faf9f7' : '#a0a0a3', border: 'none', borderRadius: 999, fontSize: 15, cursor: selected ? 'pointer' : 'default', transition: 'all 0.3s ease' }}
+                >
+                  {saved ? 'status updated ◇' : (user.currentStatus || hasCustom) ? 'update status' : 'share with circle'}
                 </button>
                 {(user.currentStatus || hasCustom) && (
                   <button onClick={handleCancel} className="text-m" style={{ padding: '14px 20px', background: 'none', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 999, fontSize: 14, cursor: 'pointer' }}>cancel</button>
@@ -150,8 +166,13 @@ export default function StatusPage() {
                 <p style={{ position: 'absolute', bottom: 10, right: 14, fontSize: 11, color: customText.length > 40 ? '#c0392b' : '#c0bdb8' }}>{customText.length}/50</p>
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={handleSaveCustom} disabled={!customText.trim()} style={{ flex: 1, padding: '14px', background: customSaved ? '#8a9e8c' : customText.trim() ? '#2c2c2e' : '#f4f3f0', color: customText.trim() ? '#faf9f7' : '#a0a0a3', border: 'none', borderRadius: 999, fontSize: 15, cursor: customText.trim() ? 'pointer' : 'default', transition: 'all 0.3s ease' }}>
-                  {customSaved ? 'status shared' : 'share with circle'}
+                <button
+                  data-custom-status-save
+                  onClick={handleSaveCustom}
+                  disabled={!customText.trim()}
+                  style={{ flex: 1, padding: '14px', background: customSaved ? '#8a9e8c' : customText.trim() ? '#2c2c2e' : '#f4f3f0', color: customText.trim() ? '#faf9f7' : '#a0a0a3', border: 'none', borderRadius: 999, fontSize: 15, cursor: customText.trim() ? 'pointer' : 'default', transition: 'all 0.3s ease' }}
+                >
+                  {customSaved ? 'status shared ◇' : 'share with circle'}
                 </button>
                 {(user.currentStatus || hasCustom) && (
                   <button onClick={handleCancel} className="text-m" style={{ padding: '14px 20px', background: 'none', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 999, fontSize: 14, cursor: 'pointer' }}>cancel</button>

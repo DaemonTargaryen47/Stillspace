@@ -28,15 +28,24 @@ export default function HomePage() {
     const t = setInterval(update, 1000)
     return () => {
       clearInterval(t)
-      if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
     }
   }, [])
 
   const subscribeToSelf = (u) => {
-    if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
-    const channel = supabase.channel('home_self_' + u.inviteCode)
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
+    }
+    const channel = supabase
+      .channel('home_self_' + u.inviteCode)
       .on('postgres_changes', {
-        event: 'UPDATE', schema: 'public', table: 'users',
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'users',
         filter: 'invite_code=eq.' + u.inviteCode,
       }, (payload) => {
         const remote = payload.new
@@ -135,7 +144,11 @@ export default function HomePage() {
         </section>
 
         <section style={{ marginBottom: 16 }}>
-          <WeatherRoom mood={user.currentStatus === 'overwhelmed' ? 'overwhelmed' : user.currentStatus === 'okay' || user.currentStatus === 'good' ? 'calm' : user.currentStatus === 'space' || user.currentStatus === 'distant' ? 'quiet' : 'neutral'} />
+          <WeatherRoom mood={
+            user.currentStatus === 'overwhelmed' ? 'overwhelmed' :
+            user.currentStatus === 'okay' || user.currentStatus === 'good' ? 'calm' :
+            user.currentStatus === 'space' || user.currentStatus === 'distant' ? 'quiet' : 'neutral'
+          } />
         </section>
 
         <section style={{ marginBottom: 16 }}>
@@ -188,7 +201,15 @@ export default function HomePage() {
 }
 
 function DailyThought() {
-  const thoughts = ["You don't have to be everything to everyone.", "Rest is productive.", "It's okay to take up space.", "Your feelings are not a burden.", "Presence is enough.", "You are allowed to change your mind.", "Slow is not the same as stuck."]
+  const thoughts = [
+    "You don't have to be everything to everyone.",
+    "Rest is productive.",
+    "It's okay to take up space.",
+    "Your feelings are not a burden.",
+    "Presence is enough.",
+    "You are allowed to change your mind.",
+    "Slow is not the same as stuck.",
+  ]
   const thought = thoughts[new Date().getDay() % thoughts.length]
   return (
     <div style={{ padding: '22px 24px', background: 'var(--bg-muted)', borderRadius: 18, position: 'relative', overflow: 'hidden' }}>
@@ -202,7 +223,9 @@ function GentleReminder() {
   return (
     <div style={{ padding: '24px', background: 'var(--bg-card)', borderRadius: 18, boxShadow: 'var(--shadow)', textAlign: 'center', marginBottom: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 16 }}>
-        {['◇', '○', '△'].map((s, i) => <span key={i} style={{ fontSize: 20, color: 'var(--text-faint)', animation: 'softFloat ' + (3 + i) + 's ease-in-out infinite', animationDelay: i * 0.6 + 's', display: 'inline-block' }}>{s}</span>)}
+        {['◇', '○', '△'].map((s, i) => (
+          <span key={i} style={{ fontSize: 20, color: 'var(--text-faint)', animationName: 'softFloat', animationDuration: (3 + i) + 's', animationTimingFunction: 'ease-in-out', animationIterationCount: 'infinite', animationDelay: i * 0.6 + 's', display: 'inline-block' }}>{s}</span>
+        ))}
       </div>
       <p style={{ fontFamily: 'var(--font-serif)', fontSize: 16, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
         You can come and go freely.<br />No need to respond.
