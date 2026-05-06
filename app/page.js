@@ -393,7 +393,7 @@ export default function LandingPage() {
 
           {/* Left column */}
           <div style={{ flex: '0 0 auto', width: '100%', maxWidth: 460, textAlign: 'center' }} className="landing-left">
-            <p style={{ fontSize: 11, color: '#b0a99a', letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 20 }}>
+            <p style={{ fontSize: 11, color: '#1a1a1a', letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 20 }}>
               A Gentle Space
             </p>
 
