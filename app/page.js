@@ -4,17 +4,22 @@ import Link from 'next/link'
 import { storage } from '../lib/store'
 
 const FIGURES = [
-  { id: 0, x: 22, y: 18, color: '#c8b8a2' },
-  { id: 1, x: 68, y: 35, color: '#a8b8c2' },
-  { id: 2, x: 38, y: 65, color: '#b8c8a8' },
-  { id: 3, x: 75, y: 72, color: '#c2a8b8' },
+  { id: 0, x: 15, y: 15, color: '#c8b8a2' },
+  { id: 1, x: 68, y: 12, color: '#a8b8c2' },
+  { id: 2, x: 38, y: 38, color: '#b8c8a8' },
+  { id: 3, x: 80, y: 42, color: '#c2a8b8' },
+  { id: 4, x: 20, y: 65, color: '#a8b8a2' },
+  { id: 5, x: 60, y: 68, color: '#c2b8a2' },
+  { id: 6, x: 85, y: 78, color: '#b8a8c2' },
 ]
 
 function PersonSVG({ color }) {
   return (
-    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-      <circle cx="14" cy="9" r="5" fill={color} opacity="0.9" />
-      <path d="M4 24c0-5.523 4.477-10 10-10s10 4.477 10 10" stroke={color} strokeWidth="2.5" strokeLinecap="round" fill="none" opacity="0.7" />
+    <svg width="32" height="36" viewBox="0 0 32 36" fill="none">
+      <circle cx="16" cy="9" r="6.5" fill={color} opacity="0.95" />
+      <rect x="13.5" y="14.5" width="5" height="3" rx="2" fill={color} opacity="0.85" />
+      <path d="M4 32c0-6.627 5.373-12 12-12s12 5.373 12 12" stroke={color} strokeWidth="3" strokeLinecap="round" fill="none" opacity="0.85" />
+      <path d="M9 32c0-3.866 3.134-7 7-7s7 3.134 7 7" fill={color} opacity="0.3" />
     </svg>
   )
 }
@@ -188,7 +193,7 @@ function TheDistance() {
       const rotate = (Math.random() - 0.5) * 12
       setFigures(prev => prev.map((f, i) => i === idx ? { ...f, dx, dy, rotate } : f))
       setTimeout(() => setFigures(prev => prev.map((f, i) => i === idx ? { ...f, dx: 0, dy: 0, rotate: 0 } : f)), 2000)
-    }, 5000 + Math.random() * 3000)
+    }, 4000 + Math.random() * 3000)
     return () => clearInterval(interval)
   }, [])
 
@@ -197,7 +202,7 @@ function TheDistance() {
       const fig = FIGURES[Math.floor(Math.random() * FIGURES.length)]
       const id = rippleId.current++
       setRipples(prev => [...prev, { id, x: fig.x, y: fig.y, color: fig.color }])
-    }, 6000 + Math.random() * 4000)
+    }, 5000 + Math.random() * 4000)
     return () => clearInterval(interval)
   }, [])
 
@@ -207,7 +212,7 @@ function TheDistance() {
       setFigures(prev => prev.map((f, i) => i === idx ? { ...f, opacity: 0, visible: false } : f))
       const delay = 2500 + Math.random() * 2000
       setTimeout(() => setFigures(prev => prev.map((f, i) => i === idx ? { ...f, opacity: 1, visible: true } : f)), delay)
-    }, 10000 + Math.random() * 5000)
+    }, 8000 + Math.random() * 5000)
     return () => clearInterval(interval)
   }, [])
 
@@ -216,9 +221,9 @@ function TheDistance() {
       <div style={{
         width: '100%', height: '100%', position: 'relative',
         background: 'linear-gradient(145deg, #faf9f7 0%, #f4f2ef 50%, #f8f6f3 100%)',
-        borderRadius: 28, overflow: 'hidden', minHeight: 460,
+        borderRadius: 28, overflow: 'hidden', minHeight: 480,
       }}>
-        <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.25 }}>
+        <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.2 }}>
           <defs>
             <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
               <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#c8c4be" strokeWidth="0.5"/>
@@ -228,7 +233,13 @@ function TheDistance() {
         </svg>
 
         {FIGURES.map(f => (
-          <div key={'ring-' + f.id} style={{ position: 'absolute', left: f.x + '%', top: f.y + '%', transform: 'translate(-50%, -50%)', width: 90, height: 90, borderRadius: '50%', border: '1px solid ' + f.color + '30', pointerEvents: 'none' }} />
+          <div key={'ring-' + f.id} style={{
+            position: 'absolute', left: f.x + '%', top: f.y + '%',
+            transform: 'translate(-50%, -50%)',
+            width: 80, height: 80, borderRadius: '50%',
+            border: '1.5px solid ' + f.color + '55',
+            pointerEvents: 'none',
+          }} />
         ))}
 
         {ripples.map(r => (
@@ -241,23 +252,34 @@ function TheDistance() {
             transform: `translate(-50%, -50%) translate(${f.dx}px, ${f.dy}px) rotate(${f.rotate}deg)`,
             opacity: f.opacity,
             transition: 'transform 1.8s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 1.4s ease',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
           }}>
             <PersonSVG color={f.color} />
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: f.color + '18', border: '1px solid ' + f.color + '40' }} />
+            <div style={{
+              width: 32, height: 10, borderRadius: '50%',
+              background: f.color + '55',
+              filter: 'blur(3px)',
+              marginTop: -4,
+            }} />
           </div>
         ))}
 
         <div style={{
           position: 'absolute', top: 18, right: 18, zIndex: 5,
           display: 'flex', alignItems: 'center', gap: 7,
-          padding: '7px 14px', background: 'rgba(255,255,255,0.82)',
+          padding: '7px 14px', background: 'rgba(255,255,255,0.88)',
           borderRadius: 999, backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(0,0,0,0.07)',
-          boxShadow: '0 2px 12px rgba(0,0,0,0.06)', transition: 'all 0.5s ease',
+          border: '1px solid rgba(0,0,0,0.09)',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+          transition: 'all 0.5s ease',
         }}>
-          <div style={{ width: 7, height: 7, borderRadius: '50%', background: visibleCount > 2 ? '#8a9e8c' : '#c8a88a', boxShadow: '0 0 0 2px ' + (visibleCount > 2 ? '#8a9e8c' : '#c8a88a') + '30', transition: 'background 0.5s ease' }} />
-          <p style={{ fontSize: 13, color: '#4a4a4c', fontWeight: 500, letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
+          <div style={{
+            width: 7, height: 7, borderRadius: '50%',
+            background: visibleCount >= 5 ? '#8a9e8c' : visibleCount >= 3 ? '#c8a88a' : '#c0392b',
+            boxShadow: '0 0 0 2px ' + (visibleCount >= 5 ? '#8a9e8c' : visibleCount >= 3 ? '#c8a88a' : '#c0392b') + '30',
+            transition: 'background 0.5s ease',
+          }} />
+          <p style={{ fontSize: 13, color: '#3a3a3c', fontWeight: 600, letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
             {FIGURES.length} people · {visibleCount} visible
           </p>
         </div>
@@ -288,19 +310,11 @@ function TopBar({ isMobile }) {
     ? user.email.slice(0, 2).toUpperCase()
     : null
 
-  const barBg = isMobile
-    ? 'rgba(250,249,247,0.95)'
-    : 'rgba(26,26,28,0.96)'
-  const borderCol = isMobile
-    ? 'rgba(0,0,0,0.06)'
-    : 'rgba(255,255,255,0.06)'
+  const barBg = isMobile ? 'rgba(250,249,247,0.95)' : 'rgba(26,26,28,0.96)'
+  const borderCol = isMobile ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)'
   const logoColor = isMobile ? '#2c2c2e' : '#f0ede8'
-  const avatarBorder = isMobile
-    ? 'rgba(0,0,0,0.1)'
-    : 'rgba(255,255,255,0.12)'
-  const avatarBorderHover = isMobile
-    ? 'rgba(0,0,0,0.25)'
-    : 'rgba(255,255,255,0.3)'
+  const avatarBorder = isMobile ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)'
+  const avatarBorderHover = isMobile ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.3)'
   const guestBg = isMobile ? '#f0ede8' : '#3a3a3c'
   const guestColor = isMobile ? '#b0a99a' : '#787570'
   const signedInBg = isMobile ? '#e8f0ea' : '#2a4a2c'
@@ -309,29 +323,20 @@ function TopBar({ isMobile }) {
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 200,
-      height: 56,
-      background: barBg,
-      backdropFilter: 'blur(20px)',
+      height: 56, background: barBg, backdropFilter: 'blur(20px)',
       borderBottom: '1px solid ' + borderCol,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      {/* Logo — centered */}
       <Link href="/" style={{ textDecoration: 'none' }}>
         <span style={{ fontFamily: 'var(--font-serif)', fontSize: 20, color: logoColor, letterSpacing: '-0.01em' }}>
           Stillspace
         </span>
       </Link>
-
-      {/* Account — pinned right */}
       <Link href={user && !user.isGuest ? '/settings' : '/home'} style={{ textDecoration: 'none', position: 'absolute', right: 20 }}>
         {user?.avatar && !user?.isGuest ? (
-          <img
-            src={user.avatar} alt=""
-            style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', border: '2px solid ' + avatarBorder, display: 'block', transition: 'border-color 0.2s ease' }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = avatarBorderHover}
-            onMouseLeave={e => e.currentTarget.style.borderColor = avatarBorder}
+          <img src={user.avatar} alt="" style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', border: '2px solid ' + avatarBorder, display: 'block', transition: 'border-color 0.2s ease' }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = avatarBorderHover}
+          onMouseLeave={e => e.currentTarget.style.borderColor = avatarBorder}
           />
         ) : (
           <div style={{
@@ -339,8 +344,7 @@ function TopBar({ isMobile }) {
             background: user && !user.isGuest && initials ? signedInBg : guestBg,
             border: '2px solid ' + avatarBorder,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: user && !user.isGuest && initials ? 12 : 16,
-            fontWeight: 500,
+            fontSize: user && !user.isGuest && initials ? 12 : 16, fontWeight: 500,
             color: user && !user.isGuest && initials ? signedInColor : guestColor,
             cursor: 'pointer', transition: 'all 0.2s ease',
           }}
@@ -371,37 +375,24 @@ export default function LandingPage() {
 
   return (
     <>
-      {/* Desktop top bar */}
       {isDesktop && <TopBar isMobile={false} />}
-
-      {/* Mobile top bar */}
       {!isDesktop && mounted && <TopBar isMobile={true} />}
 
       <div style={{
-        minHeight: '100vh',
-        background: '#faf9f7',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        minHeight: '100vh', background: '#faf9f7',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: isDesktop ? '80px 48px 40px' : '80px 24px 40px',
-        position: 'relative',
-        overflow: 'hidden',
+        position: 'relative', overflow: 'hidden',
       }}>
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
           <div style={{ position: 'absolute', top: -120, right: -120, width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(138,158,140,0.06) 0%, transparent 70%)' }} />
           <div style={{ position: 'absolute', bottom: -80, left: -80, width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle, rgba(160,144,128,0.06) 0%, transparent 70%)' }} />
         </div>
 
-        <div style={{
-          width: '100%', maxWidth: 1100,
-          display: 'flex', alignItems: 'center', gap: 60,
-          position: 'relative', zIndex: 1,
-        }}>
+        <div style={{ width: '100%', maxWidth: 1100, display: 'flex', alignItems: 'center', gap: 60, position: 'relative', zIndex: 1 }}>
+
           {/* Left column */}
-          <div
-            style={{ flex: '0 0 auto', width: '100%', maxWidth: 460, textAlign: 'center' }}
-            className="landing-left"
-          >
+          <div style={{ flex: '0 0 auto', width: '100%', maxWidth: 460, textAlign: 'center' }} className="landing-left">
             <p style={{ fontSize: 11, color: '#b0a99a', letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 20 }}>
               A Gentle Space
             </p>
@@ -414,19 +405,49 @@ export default function LandingPage() {
               Keep in touch with your closest people,<br />without the stress.
             </p>
 
-            <Link href="/home" style={{ textDecoration: 'none', display: 'inline-block', marginBottom: 24 }}>
-              <div style={{
-                padding: '16px 40px', background: '#2c2c2e', borderRadius: 999,
-                fontSize: 15, fontWeight: 500, color: '#faf9f7', letterSpacing: '0.02em',
-                cursor: 'pointer', transition: 'all 0.2s ease',
-                boxShadow: '0 4px 20px rgba(44,44,46,0.15)',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 28px rgba(44,44,46,0.2)' }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(44,44,46,0.15)' }}
-              >
-                Enter Your Space
-              </div>
-            </Link>
+            {/* Desktop — two buttons side by side */}
+            <div className="desktop-btns" style={{ display: 'none', gap: 12, marginBottom: 24, alignItems: 'center' }}>
+              <Link href="/home" style={{ textDecoration: 'none' }}>
+                <div style={{
+                  padding: '16px 32px', background: '#2c2c2e', borderRadius: 999,
+                  fontSize: 15, fontWeight: 500, color: '#faf9f7', letterSpacing: '0.02em',
+                  cursor: 'pointer', transition: 'all 0.2s ease',
+                  boxShadow: '0 4px 20px rgba(44,44,46,0.15)',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 28px rgba(44,44,46,0.2)' }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(44,44,46,0.15)' }}
+                >
+                  Enter Your Space
+                </div>
+              </Link>
+              <Link href="/settings" style={{ textDecoration: 'none' }}>
+                <div style={{
+                  padding: '16px 32px', background: '#1a1a1c', borderRadius: 999,
+                  fontSize: 15, fontWeight: 500, color: '#ffffff', letterSpacing: '0.02em',
+                  cursor: 'pointer', transition: 'all 0.2s ease',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 28px rgba(0,0,0,0.3)' }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.2)' }}
+                >
+                  Create Your Space
+                </div>
+              </Link>
+            </div>
+
+            {/* Mobile — single button */}
+            <div className="mobile-btn" style={{ marginBottom: 24 }}>
+              <Link href="/settings" style={{ textDecoration: 'none', display: 'inline-block' }}>
+                <div style={{
+                  padding: '16px 40px', background: '#1a1a1c', borderRadius: 999,
+                  fontSize: 15, fontWeight: 500, color: '#ffffff', letterSpacing: '0.02em',
+                  cursor: 'pointer', transition: 'all 0.2s ease',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+                }}>
+                  Create Your Space
+                </div>
+              </Link>
+            </div>
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 48 }}>
               {['No Pressure', 'No Urgency'].map(label => (
@@ -436,7 +457,7 @@ export default function LandingPage() {
 
             <div style={{ display: 'flex', justifyContent: 'center', gap: 20 }}>
               {symbols.map((s, i) => (
-                <span key={i} style={{ fontSize: 16, color: '#d0cdc8', animation: 'softFloat ' + (3 + i * 0.5) + 's ease-in-out infinite', animationDelay: i * 0.4 + 's', display: 'inline-block' }}>{s}</span>
+                <span key={i} style={{ fontSize: 16, color: '#d0cdc8', animationName: 'softFloat', animationDuration: (3 + i * 0.5) + 's', animationTimingFunction: 'ease-in-out', animationIterationCount: 'infinite', animationDelay: i * 0.4 + 's', display: 'inline-block' }}>{s}</span>
               ))}
             </div>
           </div>
@@ -448,21 +469,18 @@ export default function LandingPage() {
         </div>
 
         <style>{`
+          .mobile-btn { display: block; }
+          .desktop-btns { display: none !important; }
+
           @media (min-width: 768px) {
-            .landing-left {
-              text-align: left !important;
-            }
-            .landing-left p[style*="max-width"] {
-              margin-left: 0 !important;
-            }
+            .mobile-btn { display: none !important; }
+            .desktop-btns { display: flex !important; }
+            .landing-left { text-align: left !important; }
+            .landing-left p[style*="max-width"] { margin-left: 0 !important; }
             .landing-left > div[style*="justify-content: center"],
             .landing-left > div:nth-child(5),
-            .landing-left > div:nth-child(6) {
-              justify-content: flex-start !important;
-            }
-            .landing-right {
-              display: block !important;
-            }
+            .landing-left > div:nth-child(6) { justify-content: flex-start !important; }
+            .landing-right { display: block !important; }
           }
         `}</style>
       </div>
