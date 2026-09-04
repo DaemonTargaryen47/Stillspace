@@ -19,7 +19,8 @@ Just a quiet place to exist near people you trust — and disappear whenever you
 
 ---
 
-<!-- Insert a screenshot or short screen-recording GIF here: the ambient feed, a status update, or the Emotional Weather Room -->
+   ![Stillspace Screenshot 1](stillspace1.PNG)
+   ![Stillspace Screenshot 2](stillspace2.PNG)
 
 ## 💭 Why Stillspace Exists
 
